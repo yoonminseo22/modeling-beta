@@ -12,7 +12,7 @@ st.subheader("Google 계정으로 로그인하고, 조회수를 분석하세요!
 client_id = st.secrets["google_oauth"]["client_id"]
 client_secret = st.secrets["google_oauth"]["client_secret"]
 
-REDIRECT_URI = "REDIRECT_URI = "https://modeling-beta-1.streamlit.app"  # ← 앱 주소로 교체
+REDIRECT_URI = "https://modeling-beta-1.streamlit.app"  # ← 앱 주소로 교체
 
 # OAuth flow 객체 구성
 flow = Flow.from_client_config(
