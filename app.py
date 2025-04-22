@@ -7,31 +7,22 @@ import os
 
 st.set_page_config(page_title="📈 유튜브 조회수 분석기", layout="centered")
 st.title("📈 유튜브 조회수 분석기")
+st.subheader("Google 계정으로 로그인하고, 조회수를 분석하세요!")
 
-# ✅ client_secret.json 파일 필요 (Streamlit Cloud에서는 secrets로 구성 권장)
-# Streamlit Cloud에서는 secrets를 사용해서 아래 값 대체
-client_id = st.secrets["google_oauth"]["client_id"]
-client_secret = st.secrets["google_oauth"]["client_secret"]
-redirect_uri = "https://modeling-beta-1.streamlit.app"
 
+# ✅ Streamlit 환경에서 client_secret.json 사용
+CLIENT_SECRET_FILE = "client_secret.json"
+REDIRECT_URI = "https://modeling-beta-1.streamlit.app"
 SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/spreadsheets",
     "openid"
 ]
 
-flow = Flow.from_client_config(
-    {
-        "web": {
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": [redirect_uri]
-        }
-    },
+flow = Flow.from_client_secrets_file(
+    CLIENT_SECRET_FILE,
     scopes=SCOPES,
-    redirect_uri=redirect_uri
+    redirect_uri=REDIRECT_URI
 )
 
 auth_url, _ = flow.authorization_url(prompt="consent")
@@ -50,7 +41,7 @@ if "code" in query_params and "credentials" not in st.session_state:
         id_info = id_token.verify_oauth2_token(
             credentials.id_token,
             request,
-            client_id
+            credentials.client_id
         )
         st.session_state["credentials"] = credentials
         st.session_state["user_info"] = id_info
@@ -66,7 +57,7 @@ if "credentials" in st.session_state:
     st.write("📧 이메일:", user["email"])
 
     # 구글 시트 저장 예시
-    SPREADSHEET_ID = "11WkROAZtU8bKo1ezzuXiNigbdFyB5rqYPr5Lyd1ve24"
+    SPREADSHEET_ID ="11WkROAZtU8bKo1ezzuXiNigbdFyB5rqYPr5Lyd1ve24"
     SHEET_NAME = "Sheet1"
 
     service = build("sheets", "v4", credentials=creds)
