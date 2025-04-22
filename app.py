@@ -44,20 +44,27 @@ if "credentials" not in st.session_state and "code" not in query_params:
 
 # ✅ 로그인 후 돌아온 경우
 if "code" in query_params and "credentials" not in st.session_state:
-    try:
-        flow.fetch_token(code=query_params["code"][0])
-        credentials = flow.credentials
-        request = Request()
-        id_info = id_token.verify_oauth2_token(
-            credentials.id_token,
-            request,
-            client_id
-        )
-        st.session_state["credentials"] = credentials
-        st.session_state["user_info"] = id_info
-        st.experimental_rerun()
-    except Exception as e:
-        st.error(f"❌ 인증 오류 발생: {e}")
+    code = query_params["code"][0]
+
+    # ✅ 이전에 사용한 code라면 중단
+    if st.session_state.get("code_used") == code:
+        st.warning("⏳ 이미 처리된 인증 코드입니다. 다시 로그인하세요.")
+    else:
+        st.session_state["code_used"] = code
+        try:
+            flow.fetch_token(code=code)
+            credentials = flow.credentials
+            request = Request()
+            id_info = id_token.verify_oauth2_token(
+                credentials.id_token,
+                request,
+                client_id
+            )
+            st.session_state["credentials"] = credentials
+            st.session_state["user_info"] = id_info
+            st.experimental_rerun()
+        except Exception as e:
+            st.error(f"❌ 인증 오류 발생: {e}")
 
 # ✅ 로그인 성공 후 기능 제공
 if "credentials" in st.session_state:
