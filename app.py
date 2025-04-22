@@ -3,14 +3,12 @@ from google_auth_oauthlib.flow import Flow
 from google.auth.transport.requests import Request
 from google.oauth2 import id_token
 from googleapiclient.discovery import build
-import os
 
 st.set_page_config(page_title="📈 유튜브 조회수 분석기", layout="centered")
 st.title("📈 유튜브 조회수 분석기")
 st.subheader("Google 계정으로 로그인하고, 조회수를 분석하세요!")
 
 
-# ✅ secrets.toml에서 불러오기
 client_id = st.secrets["google_oauth"]["client_id"]
 client_secret = st.secrets["google_oauth"]["client_secret"]
 redirect_uri = "https://modeling-beta-1.streamlit.app"
@@ -36,44 +34,44 @@ flow = Flow.from_client_config(
 )
 
 auth_url, _ = flow.authorization_url(prompt="consent")
-query_params = st.query_params
+query = st.query_params
 
-# ✅ 로그인하지 않은 경우
-if "credentials" not in st.session_state and "code" not in query_params:
+# Step 1: 최초 로그인 버튼
+if "credentials" not in st.session_state and "code" not in query and "code_waiting" not in st.session_state:
     st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
 
-# ✅ 로그인 후 돌아온 경우
-if "code" in query_params and "credentials" not in st.session_state:
-    code = query_params["code"][0]
+# Step 2: code 받으면 query param 초기화 후 세션에 저장
+if "code" in query and "code_used" not in st.session_state:
+    st.session_state["code_waiting"] = query["code"][0]
+    st.experimental_set_query_params()
+    st.rerun()
 
-    # ✅ 이전에 사용한 code라면 중단
-    if st.session_state.get("code_used") == code:
-        st.warning("⏳ 이미 처리된 인증 코드입니다. 다시 로그인하세요.")
-    else:
-        st.session_state["code_used"] = code
-        try:
-            flow.fetch_token(code=code)
-            credentials = flow.credentials
-            request = Request()
-            id_info = id_token.verify_oauth2_token(
-                credentials.id_token,
-                request,
-                client_id
-            )
-            st.session_state["credentials"] = credentials
-            st.session_state["user_info"] = id_info
-            st.experimental_rerun()
-        except Exception as e:
-            st.error(f"❌ 인증 오류 발생: {e}")
+# Step 3: code 기반 인증 (한 번만 실행)
+if "code_waiting" in st.session_state and "code_used" not in st.session_state:
+    code = st.session_state["code_waiting"]
+    st.session_state["code_used"] = code
+    try:
+        flow.fetch_token(code=code)
+        credentials = flow.credentials
+        request = Request()
+        id_info = id_token.verify_oauth2_token(
+            credentials.id_token,
+            request,
+            client_id
+        )
+        st.session_state["credentials"] = credentials
+        st.session_state["user_info"] = id_info
+        st.rerun()
+    except Exception as e:
+        st.error(f"❌ 인증 실패: {e}")
 
-# ✅ 로그인 성공 후 기능 제공
+# Step 4: 인증 완료된 사용자
 if "credentials" in st.session_state:
     creds = st.session_state["credentials"]
     user = st.session_state["user_info"]
     st.success(f"👋 안녕하세요, {user['name']} 님!")
     st.write("📧 이메일:", user["email"])
 
-    # 구글 시트 저장 예시
     SPREADSHEET_ID = "11WkROAZtU8bKo1ezzuXiNigbdFyB5rqYPr5Lyd1ve24"
     SHEET_NAME = "Sheet1"
 
@@ -94,4 +92,3 @@ if "credentials" in st.session_state:
             st.success("✅ 저장 완료!")
         except Exception as e:
             st.error(f"❌ 저장 실패: {e}")
-
