@@ -12,11 +12,11 @@ st.subheader("Google 계정으로 로그인하고, 조회수를 분석하세요!
 # 🔐 secrets.toml에서 OAuth 정보
 client_id = st.secrets["google_oauth"]["client_id"]
 client_secret = st.secrets["google_oauth"]["client_secret"]
-redirect_uri = "https://modeling-beta-1.streamlit.app"
+redirect_uri = "https://modeling-beta-1.streamlit.app".rstrip("/")
 
 # 🔑 로그인 URL 생성
 auth_base = "https://accounts.google.com/o/oauth2/auth"
-auth_params = {
+params = {
     "client_id": client_id,
     "response_type": "code",
     "scope": "openid email profile",
@@ -24,7 +24,7 @@ auth_params = {
     "access_type": "offline",
     "prompt": "consent"
 }
-auth_url = f"{auth_base}?{urlencode(auth_params)}"
+auth_url = f"https://accounts.google.com/o/oauth2/auth?{urlencode(params)}"
 
 # 🔁 query param 체크
 query_params = st.query_params
