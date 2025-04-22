@@ -59,3 +59,41 @@ if "credentials" in st.session_state:
     st.success(f"👋 환영합니다, {user['name']} 님!")
     st.write(f"📧 이메일: {user['email']}")
     st.markdown("이제 유튜브 링크를 붙여넣고 조회수 분석을 시작할 수 있어요.")
+
+    # ✨ 유튜브 분석 기능 시작!
+    st.header("🎥 유튜브 조회수 가져오기")
+
+    YOUTUBE_API_KEY = st.secrets["youtube"]["api_key"]
+
+    def extract_video_id(url):
+        import re
+        match = re.search(r"(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})", url)
+        return match.group(1) if match else None
+
+    def get_video_statistics(video_id):
+        import requests
+        url = f"https://www.googleapis.com/youtube/v3/videos?part=statistics&id={video_id}&key={YOUTUBE_API_KEY}"
+        response = requests.get(url)
+        if response.status_code == 200:
+            items = response.json().get("items")
+            if items:
+                return items[0]["statistics"]
+        return None
+
+    youtube_url = st.text_input("📎 유튜브 링크를 입력하세요")
+
+    if st.button("조회수 불러오기"):
+        video_id = extract_video_id(youtube_url)
+        if video_id:
+            stats = get_video_statistics(video_id)
+            if stats:
+                st.success("✅ 조회 완료!")
+                st.write(f"👁 조회수: {int(stats.get('viewCount', 0)):,}")
+                st.write(f"👍 좋아요 수: {int(stats.get('likeCount', 0)):,}")
+                st.write(f"💬 댓글 수: {int(stats.get('commentCount', 0)):,}")
+            else:
+                st.error("😢 영상 정보를 찾을 수 없습니다.")
+        else:
+            st.error("⛔ 유효한 유튜브 링크를 입력해주세요.")
+
+    
