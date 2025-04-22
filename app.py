@@ -49,8 +49,8 @@ if "code_waiting" in st.session_state and "code_used" not in st.session_state:
 
     try:
         flow = Flow.from_client_config(flow_config, scopes=SCOPES, redirect_uri=redirect_uri)
-        flow.fetch_token(code=code, redirect_uri=redirect_uri)
-
+        flow.fetch_token(code=code)
+        
         credentials = flow.credentials
         request = Request()
         id_info = id_token.verify_oauth2_token(
