@@ -42,7 +42,7 @@ if "credentials" not in st.session_state:
     st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
 
 # 👈 로그인 후 redirect로 돌아왔을 때
-query_params = st.experimental_get_query_params()
+query_params = st.query_params
 if "code" in query_params:
     flow.fetch_token(code=query_params["code"][0])
     credentials = flow.credentials
