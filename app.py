@@ -12,7 +12,7 @@ st.subheader("Google 계정으로 로그인하고, 조회수를 분석하세요!
 client_id = st.secrets["google_oauth"]["client_id"]
 client_secret = st.secrets["google_oauth"]["client_secret"]
 
-REDIRECT_URI = "https://modeling-beta-1.streamlit.app"  # ← 앱 주소로 교체
+REDIRECT_URI = "https://modeling-beta-1.streamlit.app"   # ← 앱 주소로 교체
 
 # OAuth flow 객체 구성
 flow = Flow.from_client_config(
@@ -41,22 +41,25 @@ auth_url, _ = flow.authorization_url(prompt="consent")
 if "credentials" not in st.session_state:
     st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
 
-# 👈 로그인 후 redirect로 돌아왔을 때
+# ✅ 로그인 후 redirect로 돌아왔을 때
 query_params = st.query_params
 
+# ▶ 인증 코드 처리 블록 (중복 방지용 세션 키 사용)
 if "code" in query_params and "credentials" not in st.session_state:
-    try:
-        flow.fetch_token(code=query_params["code"][0])
-        credentials = flow.credentials
-        request = google.auth.transport.requests.Request()
-        id_info = id_token.verify_oauth2_token(
-            credentials._id_token, request, flow.client_config["client_id"]
-        )
-        st.session_state["credentials"] = id_info
-        st.experimental_rerun()
-    except Exception as e:
-        st.error(f"❌ 인증 처리 중 오류 발생: {e}")
-        
+    if "code_used" not in st.session_state or st.session_state["code_used"] != query_params["code"][0]:
+        try:
+            flow.fetch_token(code=query_params["code"][0])
+            credentials = flow.credentials
+            request = requests.Request()
+            id_info = id_token.verify_oauth2_token(
+                credentials._id_token, request, flow.client_config["client_id"]
+            )
+            st.session_state["credentials"] = id_info
+            st.session_state["code_used"] = query_params["code"][0]  # ✅ 한 번 쓴 코드 저장
+            st.experimental_rerun()
+        except Exception as e:
+            st.error(f"❌ 인증 처리 중 오류 발생: {e}")
+
 # ✅ 로그인 성공
 if "credentials" in st.session_state:
     user = st.session_state["credentials"]
