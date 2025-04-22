@@ -1,54 +1,51 @@
 import streamlit as st
+import google.auth.transport.requests
+from google_auth_oauthlib.flow import Flow
+from google.oauth2 import id_token
 import os
-import subprocess
+import pathlib
 
-# 🔧 pyrebase4가 없으면 설치
-try:
-    import pyrebase
-except ModuleNotFoundError:
-    subprocess.call(["pip", "install", "pyrebase4"])
-    import pyrebase
+# 페이지 설정
+st.set_page_config(page_title="📈 Youtube 조회수 분석기", page_icon="📊", layout="centered")
 
+st.title("📈 Youtube 조회수 분석기")
+st.subheader("Google 계정으로 로그인하고, 조회수를 분석하세요!")
 
-st.set_page_config(page_title="YouTube 조회수 분석기", layout="wide")
-st.title("📈 YouTube 조회수 분석기")
+# 클라이언트 시크릿 파일 경로
+CLIENT_SECRETS_FILE = "client_secret.json"
 
-st.write("구글 로그인 후, 유튜브 링크를 붙여넣고 회귀분석 결과를 확인하세요.")
+# Streamlit Cloud에 배포한 후 이 부분에 실제 주소 입력
+REDIRECT_URI = "https://yoonminseo22-modeling-beta.streamlit.app"
 
-# 🔐 1. Firebase 설정 정보
-firebaseConfig = {
-    "apiKey": "AIzaSyA7-9mz0poBpO74-Pqsc_HzeCuS8KKUid4",
-    "authDomain": "modeling-beta.firebaseapp.com",
-    "projectId": "modeling-beta",
-    "storageBucket": "modeling-beta.firebasestorage.app",
-    "messagingSenderId": "849291035256",
-    "appId": "1:849291035256:web:658b88d471fff208c4238d",
-    "measurementId": "G-4VJSKE7ZXT"
-}
+# OAuth 설정
+SCOPES = ['openid', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile']
 
-firebase = pyrebase.initialize_app(firebaseConfig)
-auth = firebase.auth()
+flow = Flow.from_client_secrets_file(
+    CLIENT_SECRETS_FILE,
+    scopes=SCOPES,
+    redirect_uri=REDIRECT_URI
+)
 
-# 🧾 2. 로그인 UI
-st.set_page_config(page_title="YouTube 분석기 로그인")
-st.title("🔐 YouTube 분석기 - 로그인")
+auth_url, _ = flow.authorization_url(prompt='consent')
 
-email = st.text_input("이메일", key="email")
-password = st.text_input("비밀번호", type="password", key="password")
+# 로그인 안 한 경우
+if "credentials" not in st.session_state:
+    st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
 
-# 🟢 로그인
-if st.button("로그인"):
-    try:
-        user = auth.sign_in_with_email_and_password(email, password)
-        st.success("✅ 로그인 성공!")
-        st.session_state["user"] = user
-    except:
-        st.error("❌ 이메일 또는 비밀번호를 확인해주세요.")
+# 로그인 후 redirect 되어 돌아온 경우
+query_params = st.experimental_get_query_params()
+if "code" in query_params:
+    flow.fetch_token(code=query_params["code"][0])
+    credentials = flow.credentials
+    request = google.auth.transport.requests.Request()
+    id_info = id_token.verify_oauth2_token(
+        credentials._id_token, request, flow.client_config["client_id"]
+    )
+    st.session_state["credentials"] = id_info
+    st.experimental_rerun()
 
-# 🔵 회원가입
-if st.button("회원가입"):
-    try:
-        auth.create_user_with_email_and_password(email, password)
-        st.success("🎉 회원가입 성공! 이제 로그인하세요.")
-    except:
-        st.error("⚠ 이미 존재하거나 비밀번호가 약합니다.")
+# 로그인 성공한 경우
+if "credentials" in st.session_state:
+    st.success("✅ 로그인 완료!")
+    st.write(f"👋 안녕하세요, {st.session_state['credentials']['name']} 님!")
+    st.write("이제 유튜브 링크를 붙여넣고 조회수를 분석할 수 있어요.")
