@@ -43,7 +43,7 @@ if "credentials" not in st.session_state and "code" not in query and "code_waiti
 # Step 2: code 받으면 query param 초기화 후 세션에 저장
 if "code" in query and "code_used" not in st.session_state:
     st.session_state["code_waiting"] = query["code"][0]
-    st.experimental_set_query_params()
+    st.query_params.clear()  # ✅ 이렇게 바꿈
     st.rerun()
 
 # Step 3: code 기반 인증 (한 번만 실행)
