@@ -44,13 +44,12 @@ if "code" in query and "code_used" not in st.session_state:
 
 if "code_waiting" in st.session_state and "code_used" not in st.session_state:
     raw_code = st.session_state["code_waiting"]
-    code = unquote(raw_code)  # ✅ 디코딩 적용
+    code = unquote(raw_code)
     st.session_state["code_used"] = code
-
     try:
         flow = Flow.from_client_config(flow_config, scopes=SCOPES, redirect_uri=redirect_uri)
-        flow.fetch_token(code=code)
-        
+        flow.fetch_token(code=code)  # ✅ 중복 제거
+
         credentials = flow.credentials
         request = Request()
         id_info = id_token.verify_oauth2_token(
@@ -70,7 +69,7 @@ if "credentials" in st.session_state:
     st.success(f"👋 안녕하세요, {user['name']} 님!")
     st.write("📧 이메일:", user["email"])
 
-    SPREADSHEET_ID = "여기11WkROAZtU8bKo1ezzuXiNigbdFyB5rqYPr5Lyd1ve24"
+    SPREADSHEET_ID = "11WkROAZtU8bKo1ezzuXiNigbdFyB5rqYPr5Lyd1ve24"
     SHEET_NAME = "Sheet1"
 
     service = build("sheets", "v4", credentials=creds)
