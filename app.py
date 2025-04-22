@@ -1,71 +1,75 @@
 import streamlit as st
-from google_auth_oauthlib.flow import Flow
-from google.auth.transport import requests
+import requests
+from urllib.parse import urlencode, parse_qs
 from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
 st.set_page_config(page_title="📈 유튜브 조회수 분석기", layout="centered")
 
 st.title("📈 유튜브 조회수 분석기")
 st.subheader("Google 계정으로 로그인하고, 조회수를 분석하세요!")
 
-# 🔐 secrets.toml에서 클라이언트 정보 불러오기
+# 🔐 secrets.toml에서 OAuth 정보
 client_id = st.secrets["google_oauth"]["client_id"]
 client_secret = st.secrets["google_oauth"]["client_secret"]
+redirect_uri = "https://modeling-beta-1.streamlit.app"
 
-REDIRECT_URI = "https://modeling-beta-1.streamlit.app"   # ← 앱 주소로 교체
+# 🔑 로그인 URL 생성
+auth_base = "https://accounts.google.com/o/oauth2/auth"
+auth_params = {
+    "client_id": client_id,
+    "response_type": "code",
+    "scope": "openid email profile",
+    "redirect_uri": redirect_uri,
+    "access_type": "offline",
+    "prompt": "consent"
+}
+auth_url = f"{auth_base}?{urlencode(auth_params)}"
 
-# OAuth flow 객체 구성
-flow = Flow.from_client_config(
-    {
-        "web": {
-            "client_id": client_id,
-            "project_id": "modeling-beta",
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-            "client_secret": client_secret,
-            "redirect_uris": [REDIRECT_URI]
-        }
-    },
-    scopes=[
-        "openid",
-        "https://www.googleapis.com/auth/userinfo.email",
-        "https://www.googleapis.com/auth/userinfo.profile",
-    ],
-    redirect_uri=REDIRECT_URI
-)
-
-auth_url, _ = flow.authorization_url(prompt="consent")
-
-# 👉 로그인하지 않은 상태
-if "credentials" not in st.session_state:
-    st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
-
-# ✅ 로그인 후 redirect로 돌아왔을 때
+# 🔁 query param 체크
 query_params = st.query_params
 
-# ▶ 인증 코드 처리 블록 (중복 방지용 세션 키 사용)
-if "code" in query_params and "credentials" not in st.session_state:
-    if "code_used" not in st.session_state or st.session_state["code_used"] != query_params["code"][0]:
-        try:
-            flow.fetch_token(code=query_params["code"][0])
-            credentials = flow.credentials
-            request = requests.Request()
-            id_info = id_token.verify_oauth2_token(
-                credentials._id_token, request, flow.client_config["client_id"]
-            )
-            st.session_state["credentials"] = id_info
-            st.session_state["code_used"] = query_params["code"][0]  # ✅ 한 번 쓴 코드 저장
-            st.experimental_rerun()
-        except Exception as e:
-            st.error(f"❌ 인증 처리 중 오류 발생: {e}")
+# 🔑 로그인한 적 없으면 로그인 버튼
+if "credentials" not in st.session_state and "code" not in query_params:
+    st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
 
-# ✅ 로그인 성공
+# 🔄 로그인 후 돌아온 경우 (code 처리)
+if "code" in query_params and "credentials" not in st.session_state:
+    try:
+        code = query_params["code"][0]
+        token_url = "https://oauth2.googleapis.com/token"
+        token_data = {
+            "code": code,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code"
+        }
+        response = requests.post(token_url, data=token_data)
+        token_info = response.json()
+
+        # ⛔ 실패한 경우
+        if "id_token" not in token_info:
+            st.error(f"❌ 인증 실패: {token_info}")
+        else:
+            # ✅ 인증 성공
+            idinfo = id_token.verify_oauth2_token(
+                token_info["id_token"],
+                google_requests.Request(),
+                client_id
+            )
+            st.session_state["credentials"] = idinfo
+            st.experimental_rerun()
+
+    except Exception as e:
+        st.error(f"❌ 인증 처리 중 오류 발생: {e}")
+
+# ✅ 로그인 성공 시 사용자 정보 표시
 if "credentials" in st.session_state:
     user = st.session_state["credentials"]
     st.success(f"👋 환영합니다, {user['name']} 님!")
     st.write(f"📧 이메일: {user['email']}")
-    st.markdown("이제 유튜브 링크를 붙여넣고 조회수 분석을 시작할 수 있어요.")
+    st.markdown("유튜브 링크를 붙여넣고 조회수 분석을 시작할 수 있어요.")
 
     # ✨ 유튜브 분석 기능 시작!
     st.header("🎥 유튜브 조회수 가져오기")
