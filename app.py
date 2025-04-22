@@ -1,5 +1,14 @@
 import streamlit as st
-import pyrebase
+import os
+import subprocess
+
+# 🔧 pyrebase4가 없으면 설치
+try:
+    import pyrebase
+except ModuleNotFoundError:
+    subprocess.call(["pip", "install", "pyrebase4"])
+    import pyrebase
+
 
 st.set_page_config(page_title="YouTube 조회수 분석기", layout="wide")
 st.title("📈 YouTube 조회수 분석기")
