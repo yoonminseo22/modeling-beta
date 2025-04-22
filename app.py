@@ -43,12 +43,12 @@ if "credentials" not in st.session_state:
 
 # 👈 로그인 후 redirect로 돌아왔을 때
 query_params = st.query_params
-if "code" in query_params:
+if "code" in query_params and "credentials" not in st.session_state:
     flow.fetch_token(code=query_params["code"][0])
     credentials = flow.credentials
-    request = requests.Request()
+    request = google.auth.transport.requests.Request()
     id_info = id_token.verify_oauth2_token(
-        credentials._id_token, request, client_id
+        credentials._id_token, request, flow.client_config["client_id"]
     )
     st.session_state["credentials"] = id_info
     st.experimental_rerun()
@@ -96,13 +96,3 @@ if "credentials" in st.session_state:
         else:
             st.error("⛔ 유효한 유튜브 링크를 입력해주세요.")
 
-if "code" in query_params:
-    if "credentials" not in st.session_state:
-        flow.fetch_token(code=query_params["code"][0])
-        credentials = flow.credentials
-        request = google.auth.transport.requests.Request()
-        id_info = id_token.verify_oauth2_token(
-            credentials._id_token, request, flow.client_config["client_id"]
-        )
-        st.session_state["credentials"] = id_info
-        st.experimental_rerun()
