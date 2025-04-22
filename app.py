@@ -96,4 +96,13 @@ if "credentials" in st.session_state:
         else:
             st.error("⛔ 유효한 유튜브 링크를 입력해주세요.")
 
-    
+if "code" in query_params:
+    if "credentials" not in st.session_state:
+        flow.fetch_token(code=query_params["code"][0])
+        credentials = flow.credentials
+        request = google.auth.transport.requests.Request()
+        id_info = id_token.verify_oauth2_token(
+            credentials._id_token, request, flow.client_config["client_id"]
+        )
+        st.session_state["credentials"] = id_info
+        st.experimental_rerun()
