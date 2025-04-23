@@ -44,11 +44,14 @@ if "code" in query and "code_used" not in st.session_state:
 
 if "code_waiting" in st.session_state and "code_used" not in st.session_state:
     raw_code = st.session_state["code_waiting"]
-    code = unquote(raw_code)
+    code = unquote(raw_code)  # ✅ 디코딩
+    st.write("📦 받은 code (인코딩 상태):", raw_code)
+    st.write("🔓 디코딩된 code:", code)
+    
     st.session_state["code_used"] = code
     try:
         flow = Flow.from_client_config(flow_config, scopes=SCOPES, redirect_uri=redirect_uri)
-        flow.fetch_token(code=code)  # ✅ 중복 제거
+        flow.fetch_token(code=code)
 
         credentials = flow.credentials
         request = Request()
