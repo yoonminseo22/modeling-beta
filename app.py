@@ -28,33 +28,34 @@ flow_config = {
     }
 }
 
-# ▶ flow 인스턴스는 세션에 한 번만 생성
+# flow는 세션에 딱 한 번만 생성
 if "flow" not in st.session_state:
     st.session_state["flow"] = Flow.from_client_config(
         flow_config, scopes=SCOPES, redirect_uri=redirect_uri
     )
 flow = st.session_state["flow"]
 
-# 사용자 인증 전
 if "credentials" not in st.session_state:
-    # 1) 로그인 버튼
-    auth_url, _ = flow.authorization_url(prompt="consent")
+    # 승인 URL 생성 시 access_type, include_granted_scopes 추가
+    auth_url, _ = flow.authorization_url(
+        access_type="offline",
+        include_granted_scopes=True,
+        prompt="consent"
+    )
     st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
 
-    # 2) 리디렉션 후 code 처리
     params = st.experimental_get_query_params()
     if "code" in params:
         code = params["code"][0]
         try:
-            flow.fetch_token(code=code)  # 한 번만 호출
+            flow.fetch_token(code=code)
             st.session_state["credentials"] = flow.credentials
-            # 파라미터 완전 제거
+            # URL에서 code 파라미터 제거
             st.experimental_set_query_params()
             st.experimental_rerun()
         except Exception as e:
             st.error(f"❌ 인증 실패: {e}")
 else:
-    # 인증 완료 후 화면
     creds = st.session_state["credentials"]
     request = Request()
     idinfo = id_token.verify_oauth2_token(creds.id_token, request, client_id)
