@@ -36,10 +36,9 @@ if "flow" not in st.session_state:
 flow = st.session_state["flow"]
 
 if "credentials" not in st.session_state:
-    # 승인 URL 생성 시 access_type, include_granted_scopes 추가
     auth_url, _ = flow.authorization_url(
         access_type="offline",
-        include_granted_scopes=True,
+        include_granted_scopes="true",  # boolean True 대신 문자열 "true"
         prompt="consent"
     )
     st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
