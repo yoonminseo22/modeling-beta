@@ -8,14 +8,14 @@ st.set_page_config(page_title="📈 유튜브 조회수 분석기", layout="cent
 st.title("📈 유튜브 조회수 분석기")
 st.subheader("Google 계정으로 로그인하고, 조회수를 분석하세요!")
 
+# OAuth2 설정
 client_id     = st.secrets["google_oauth"]["client_id"]
 client_secret = st.secrets["google_oauth"]["client_secret"]
 redirect_uri  = "https://modeling-beta-1.streamlit.app"
-
 SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/spreadsheets",
-    "openid"
+    "openid",
 ]
 flow_config = {
     "web": {
@@ -27,57 +27,56 @@ flow_config = {
     }
 }
 
-# Flow는 세션에 단 한 번만 생성
+# ─── Flow를 세션에 딱 한 번만 생성 ───
 if "flow" not in st.session_state:
-    st.session_state["flow"] = Flow.from_client_config(
+    st.session_state.flow = Flow.from_client_config(
         flow_config, scopes=SCOPES, redirect_uri=redirect_uri
     )
-flow = st.session_state["flow"]
+flow = st.session_state.flow
 
-# 아직 인증 안 된 상태
+# ─── 인증 상태 체크 ───
 if "credentials" not in st.session_state:
+    # 1) 승인을 위한 URL 링크
     auth_url, _ = flow.authorization_url(
         access_type="offline",
         prompt="consent"
     )
     st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
 
-    # 리디렉션 후 ?code= 파라미터 처리
-    params = st.experimental_get_query_params()
+    # 2) 리디렉션 후 code 처리
+    # st.query_params 는 { key: [list_of_values], ... } 형태
+    params = st.query_params
     if "code" in params:
         code = params["code"][0]
         try:
             flow.fetch_token(code=code)
-            st.session_state["credentials"] = flow.credentials
+            st.session_state.credentials = flow.credentials
 
-            # URL에 남은 code 파라미터 삭제
-            st.experimental_set_query_params()
+            # URL에서 code 파라미터 지우기
+            st.query_params = {}
 
-            # JS로 즉시 페이지 새로고침
+            # JS로 강제 리다이렉트하여 세션 유지된 채로 페이지 재로딩
             st.markdown(
                 """
                 <script>
-                    // 쿼리 파라미터 없이 현재 페이지로 강제 이동
-                    const cleanUrl = window.location.origin + window.location.pathname;
-                    window.location.replace(cleanUrl);
+                  window.location.href = window.location.origin + window.location.pathname;
                 </script>
                 """,
                 unsafe_allow_html=True
             )
             st.stop()
-
         except Exception as e:
             st.error(f"❌ 인증 실패: {e}")
-
-# 인증된 상태: 유튜브 링크 폼을 보여줌
 else:
-    creds   = st.session_state["credentials"]
+    # ─── 인증된 상태 ───
+    creds   = st.session_state.credentials
     request = Request()
     idinfo  = id_token.verify_oauth2_token(creds.id_token, request, client_id)
 
     st.success(f"👋 안녕하세요, {idinfo['name']} 님!")
     st.write("📧 이메일:", idinfo["email"])
 
+    # 스프레드시트 저장 UI
     SPREADSHEET_ID = "11WkROAZtU8bKo1ezzuXiNigbdFyB5rqYPr5Lyd1ve24"
     SHEET_NAME     = "Sheet1"
     service        = build("sheets", "v4", credentials=creds)
