@@ -27,45 +27,57 @@ flow_config = {
     }
 }
 
-# ──── Flow 인스턴스는 세션에 한 번만 생성 ────
+# Flow는 세션에 단 한 번만 생성
 if "flow" not in st.session_state:
     st.session_state["flow"] = Flow.from_client_config(
         flow_config, scopes=SCOPES, redirect_uri=redirect_uri
     )
 flow = st.session_state["flow"]
 
-# ──── 인증 전이라면 ────
+# 아직 인증 안 된 상태
 if "credentials" not in st.session_state:
-    # 1) Google 로그인 URL 생성 (스프레드시트 권한 포함)
     auth_url, _ = flow.authorization_url(
-        access_type="offline",    # 리프레시 토큰 요청
-        prompt="consent"          # 늘 재승인
+        access_type="offline",
+        prompt="consent"
     )
     st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
 
-    # 2) 리디렉션 후 전달된 ?code= 처 리
+    # 리디렉션 후 ?code= 파라미터 처리
     params = st.experimental_get_query_params()
     if "code" in params:
         code = params["code"][0]
         try:
             flow.fetch_token(code=code)
             st.session_state["credentials"] = flow.credentials
-            # URL에서 code 파라미터 제거
+
+            # URL에 남은 code 파라미터 삭제
             st.experimental_set_query_params()
-            st.success("✅ 인증이 완료되었습니다! 잠시 후 페이지를 새로고침 해주세요.")
+
+            # JS로 즉시 페이지 새로고침
+            st.markdown(
+                """
+                <script>
+                    // 쿼리 파라미터 없이 현재 페이지로 강제 이동
+                    const cleanUrl = window.location.origin + window.location.pathname;
+                    window.location.replace(cleanUrl);
+                </script>
+                """,
+                unsafe_allow_html=True
+            )
             st.stop()
+
         except Exception as e:
             st.error(f"❌ 인증 실패: {e}")
+
+# 인증된 상태: 유튜브 링크 폼을 보여줌
 else:
-    # ──── 인증된 뒤 보여줄 UI ────
-    creds = st.session_state["credentials"]
+    creds   = st.session_state["credentials"]
     request = Request()
     idinfo  = id_token.verify_oauth2_token(creds.id_token, request, client_id)
 
     st.success(f"👋 안녕하세요, {idinfo['name']} 님!")
     st.write("📧 이메일:", idinfo["email"])
 
-    # 유튜브 링크 & 조회수 입력 UI
     SPREADSHEET_ID = "11WkROAZtU8bKo1ezzuXiNigbdFyB5rqYPr5Lyd1ve24"
     SHEET_NAME     = "Sheet1"
     service        = build("sheets", "v4", credentials=creds)
