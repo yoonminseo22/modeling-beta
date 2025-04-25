@@ -2,7 +2,10 @@ import streamlit as st
 from google_auth_oauthlib.flow import Flow
 from google.auth.transport.requests import Request
 from google.oauth2 import id_token
-from googleapiclient.discovery import build
+from googleapiclient.discovery import build as yt_build
+import re
+
+YOUTUBE_API_KEY = st.secrets["youtube"]["api_key"]
 
 st.set_page_config(page_title="📈 유튜브 조회수 분석기", layout="centered")
 st.title("📈 유튜브 조회수 분석기")
@@ -77,6 +80,54 @@ else:
     display_name = idinfo.get("name") or idinfo.get("email", "").split("@")[0]
     st.success(f"👋 안녕하세요, {display_name} 님!")
     st.write("📧 이메일:", idinfo["email"])
+
+        # 1) YouTube Data API 클라이언트
+    yt = yt_build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
+
+    # 2) 입력 UI: 유튜브 영상 URL
+    st.subheader("▶ 유튜브 영상 등록")
+    video_url = st.text_input("유튜브 URL을 붙여넣으세요")
+
+    if st.button("영상 등록"):
+        # 3) URL에서 Video ID 추출 (표준 https://youtu.be/ID 또는 www.youtube.com/watch?v=ID)
+        match = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", video_url)
+        if not match:
+            st.error("❌ 올바른 YouTube URL이 아닙니다.")
+        else:
+            video_id = match.group(1)
+            try:
+                # 4) 조회수 가져오기
+                resp = yt.videos().list(
+                    part="statistics",
+                    id=video_id
+                ).execute()
+
+                stats = resp["items"][0]["statistics"]
+                view_count = int(stats.get("viewCount", 0))
+
+                st.success(f"✅ 현재 조회수: {view_count:,}회")
+
+                # 5) 스프레드시트에 기록
+                from datetime import datetime
+                timestamp = datetime.utcnow().isoformat()
+
+                service = build("sheets", "v4", credentials=creds)
+                service.spreadsheets().values().append(
+                    spreadsheetId=SPREADSHEET_ID,
+                    range=f"{SHEET_NAME}!A:D",
+                    valueInputOption="RAW",
+                    body={"values": [[
+                        idinfo["email"],   # 로그인한 유저 이메일
+                        video_id,
+                        timestamp,
+                        view_count
+                    ]]}
+                ).execute()
+
+                st.success("✅ 스프레드시트에 저장되었습니다!")
+
+            except Exception as e:
+                st.error(f"❌ YouTube API 호출 실패: {e}")
 
     # 스프레드시트 저장 UI
     SPREADSHEET_ID = "11WkROAZtU8bKo1ezzuXiNigbdFyB5rqYPr5Lyd1ve24"
