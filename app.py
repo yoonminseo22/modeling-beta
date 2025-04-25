@@ -73,7 +73,9 @@ else:
     request = Request()
     idinfo  = id_token.verify_oauth2_token(creds.id_token, request, client_id)
 
-    st.success(f"👋 안녕하세요, {idinfo['name']} 님!")
+    # idinfo.get 으로 안전하게 꺼내되, 없으면 이메일 앞 부분을 이름처럼 사용
+    display_name = idinfo.get("name") or idinfo.get("email", "").split("@")[0]
+    st.success(f"👋 안녕하세요, {display_name} 님!")
     st.write("📧 이메일:", idinfo["email"])
 
     # 스프레드시트 저장 UI
