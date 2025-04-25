@@ -79,25 +79,27 @@ else:
     request = Request()
     idinfo  = id_token.verify_oauth2_token(creds.id_token, request, client_id)
 
+     # 1) YouTube Data API 클라이언트
+    service = build("sheets", "v4", credentials=creds)
+    yt = yt_build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
+
     # idinfo.get 으로 안전하게 꺼내되, 없으면 이메일 앞 부분을 이름처럼 사용
     display_name = idinfo.get("name") or idinfo.get("email", "").split("@")[0]
     st.success(f"👋 안녕하세요, {display_name} 님!")
     st.write("📧 이메일:", idinfo["email"])
-
-        # 1) YouTube Data API 클라이언트
-    yt = yt_build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
 
     # 2) 입력 UI: 유튜브 영상 URL
     st.subheader("▶ 유튜브 영상 등록")
     video_url = st.text_input("유튜브 URL을 붙여넣으세요")
 
     if st.button("영상 등록"):
-        # 3) URL에서 Video ID 추출 (표준 https://youtu.be/ID 또는 www.youtube.com/watch?v=ID)
+        # 1) URL에서 video_id 추출
         match = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", video_url)
         if not match:
             st.error("❌ 올바른 YouTube URL이 아닙니다.")
         else:
             video_id = match.group(1)
+            # 2) YouTube API로 조회수 가져오기
             try:
                 resp = yt.videos().list(part="statistics", id=video_id).execute()
                 view_count = int(resp["items"][0]["statistics"].get("viewCount", 0))
@@ -105,27 +107,26 @@ else:
                 st.error(f"❌ YouTube API 호출 실패: {e}")
                 st.stop()
 
-            # 3) 오늘 날짜 문자열 생성
+            # 3) 현재 UTC 기준 타임스탬프 생성
             from datetime import datetime
-            timestamp = datetime.utcnow().isoformat()
-            today = timestamp.split("T")[0]   # YYYY-MM-DD
+            timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            today = timestamp.split(" ")[0]   # YYYY-MM-DD
 
-            # ── 중복 체크 코드 ──
-            # 기존 시트에서 (video_id, timestamp) 목록 가져오기
-            sheet = service.spreadsheets().values().get(
+            # ── 중복 체크 ──
+            existing = service.spreadsheets().values().get(
                 spreadsheetId=SPREADSHEET_ID,
                 range=f"{SHEET_NAME}!B:C"
             ).execute().get("values", [])
             already = any(
                 vid == video_id and ts.startswith(today)
-                for vid, ts in sheet
+                for vid, ts in existing
             )
             if already:
                 st.info("ℹ️ 오늘 이 영상은 이미 등록되었습니다.")
                 st.stop()
-            # ────────────────────
+            # ────────────────
 
-            # 4) 중복이 아니면 시트에 기록
+            # 4) 시트에 새 행으로 기록
             service.spreadsheets().values().append(
                 spreadsheetId=SPREADSHEET_ID,
                 range=f"{SHEET_NAME}!A:D",
@@ -138,5 +139,6 @@ else:
                 ]]}
             ).execute()
 
+            # 결과 출력
             st.success(f"✅ 현재 조회수: {view_count:,}회")
             st.success("✅ 스프레드시트에 저장되었습니다!")
