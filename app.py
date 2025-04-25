@@ -7,6 +7,8 @@ from googleapiclient.discovery import build as yt_build
 import re
 
 YOUTUBE_API_KEY = st.secrets["youtube"]["api_key"]
+SPREADSHEET_ID = st.secrets["sheets"]["spreadsheet_id"]
+SHEET_NAME     = st.secrets["sheets"]["sheet_name"]
 
 st.set_page_config(page_title="📈 유튜브 조회수 분석기", layout="centered")
 st.title("📈 유튜브 조회수 분석기")
@@ -131,8 +133,8 @@ else:
                 st.error(f"❌ YouTube API 호출 실패: {e}")
 
     # 스프레드시트 저장 UI
-    SPREADSHEET_ID = "11WkROAZtU8bKo1ezzuXiNigbdFyB5rqYPr5Lyd1ve24"
-    SHEET_NAME     = "Sheet1"
+    SPREADSHEET_ID = st.secrets["sheets"]["spreadsheet_id"]
+    SHEET_NAME     = st.secrets["sheets"]["sheet_name"]
     service        = build("sheets", "v4", credentials=creds)
 
     st.subheader("✅ 유튜브 링크를 입력하세요")
