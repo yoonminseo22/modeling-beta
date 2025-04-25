@@ -140,8 +140,3 @@ else:
 
             st.success(f"✅ 현재 조회수: {view_count:,}회")
             st.success("✅ 스프레드시트에 저장되었습니다!")
-            
-            except Exception as e:
-                st.error(f"❌ YouTube API 호출 실패: {e}")
-
-
