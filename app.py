@@ -99,56 +99,49 @@ else:
         else:
             video_id = match.group(1)
             try:
-                # 4) 조회수 가져오기
-                resp = yt.videos().list(
-                    part="statistics",
-                    id=video_id
-                ).execute()
+                resp = yt.videos().list(part="statistics", id=video_id).execute()
+                view_count = int(resp["items"][0]["statistics"].get("viewCount", 0))
+            except Exception as e:
+                st.error(f"❌ YouTube API 호출 실패: {e}")
+                st.stop()
 
-                stats = resp["items"][0]["statistics"]
-                view_count = int(stats.get("viewCount", 0))
+            # 3) 오늘 날짜 문자열 생성
+            from datetime import datetime
+            timestamp = datetime.utcnow().isoformat()
+            today = timestamp.split("T")[0]   # YYYY-MM-DD
 
-                st.success(f"✅ 현재 조회수: {view_count:,}회")
+            # ── 중복 체크 코드 ──
+            # 기존 시트에서 (video_id, timestamp) 목록 가져오기
+            sheet = service.spreadsheets().values().get(
+                spreadsheetId=SPREADSHEET_ID,
+                range=f"{SHEET_NAME}!B:C"
+            ).execute().get("values", [])
+            already = any(
+                vid == video_id and ts.startswith(today)
+                for vid, ts in sheet
+            )
+            if already:
+                st.info("ℹ️ 오늘 이 영상은 이미 등록되었습니다.")
+                st.stop()
+            # ────────────────────
 
-                # 5) 스프레드시트에 기록
-                from datetime import datetime
-                timestamp = datetime.utcnow().isoformat()
+            # 4) 중복이 아니면 시트에 기록
+            service.spreadsheets().values().append(
+                spreadsheetId=SPREADSHEET_ID,
+                range=f"{SHEET_NAME}!A:D",
+                valueInputOption="RAW",
+                body={"values": [[
+                    idinfo["email"],
+                    video_id,
+                    timestamp,
+                    view_count
+                ]]}
+            ).execute()
 
-                service = build("sheets", "v4", credentials=creds)
-                service.spreadsheets().values().append(
-                    spreadsheetId=SPREADSHEET_ID,
-                    range=f"{SHEET_NAME}!A:D",
-                    valueInputOption="RAW",
-                    body={"values": [[
-                        idinfo["email"],   # 로그인한 유저 이메일
-                        video_id,
-                        timestamp,
-                        view_count
-                    ]]}
-                ).execute()
-
-                st.success("✅ 스프레드시트에 저장되었습니다!")
-
+            st.success(f"✅ 현재 조회수: {view_count:,}회")
+            st.success("✅ 스프레드시트에 저장되었습니다!")
+            
             except Exception as e:
                 st.error(f"❌ YouTube API 호출 실패: {e}")
 
-    # 스프레드시트 저장 UI
-    SPREADSHEET_ID = st.secrets["sheets"]["spreadsheet_id"]
-    SHEET_NAME     = st.secrets["sheets"]["sheet_name"]
-    service        = build("sheets", "v4", credentials=creds)
 
-    st.subheader("✅ 유튜브 링크를 입력하세요")
-    link  = st.text_input("🔗 유튜브 링크")
-    views = st.number_input("👁 조회수", min_value=0, step=1)
-
-    if st.button("📩 시트에 저장"):
-        try:
-            service.spreadsheets().values().append(
-                spreadsheetId=SPREADSHEET_ID,
-                range=f"{SHEET_NAME}!A1",
-                valueInputOption="RAW",
-                body={"values": [[idinfo["email"], link, views]]}
-            ).execute()
-            st.success("✅ 저장 완료!")
-        except Exception as e:
-            st.error(f"❌ 저장 실패: {e}")
