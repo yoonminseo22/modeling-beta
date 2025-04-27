@@ -5,10 +5,12 @@ from google.oauth2 import id_token
 from googleapiclient.discovery import build
 from googleapiclient.discovery import build as yt_build
 import re
+from datetime import datetime
 
+# 설정 불러오기
 YOUTUBE_API_KEY = st.secrets["youtube"]["api_key"]
-SPREADSHEET_ID = st.secrets["sheets"]["spreadsheet_id"]
-SHEET_NAME     = st.secrets["sheets"]["sheet_name"]
+SPREADSHEET_ID  = st.secrets["sheets"]["spreadsheet_id"]
+SHEET_NAME      = st.secrets["sheets"]["sheet_name"]
 
 st.set_page_config(page_title="📈 유튜브 조회수 분석기", layout="centered")
 st.title("📈 유튜브 조회수 분석기")
@@ -33,73 +35,64 @@ flow_config = {
     }
 }
 
-# ─── Flow를 세션에 딱 한 번만 생성 ───
-if "flow" not in st.session_state:
-    st.session_state.flow = Flow.from_client_config(
-        flow_config, scopes=SCOPES, redirect_uri=redirect_uri
-    )
-flow = st.session_state.flow
-
 # ─── 인증 상태 체크 ───
 if "credentials" not in st.session_state:
-    # 1) 승인을 위한 URL 링크
-    auth_url, _ = flow.authorization_url(
-        access_type="offline",
-        prompt="consent"
-    )
-    st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
+    params = st.experimental_get_query_params()
 
-    # 2) 리디렉션 후 code 처리
-    # st.query_params 는 { key: [list_of_values], ... } 형태
-    params = st.query_params
     if "code" in params:
+        # Google이 보낸 code 처리
         code = params["code"][0]
         try:
-            flow.fetch_token(code=code)
-            st.session_state.credentials = flow.credentials
-
-            # URL에서 code 파라미터 지우기
-            st.query_params = {}
-
-            # JS로 강제 리다이렉트하여 세션 유지된 채로 페이지 재로딩
-            st.markdown(
-                """
-                <script>
-                  window.location.href = window.location.origin + window.location.pathname;
-                </script>
-                """,
-                unsafe_allow_html=True
+            flow = Flow.from_client_config(
+                flow_config, scopes=SCOPES, redirect_uri=redirect_uri
             )
-            st.stop()
+            flow.fetch_token(code=code)
+            st.session_state["credentials"] = flow.credentials
+
+            # URL에서 code, state 파라미터 지우고 새로 로드
+            st.experimental_set_query_params()
+            st.experimental_rerun()
         except Exception as e:
             st.error(f"❌ 인증 실패: {e}")
+    else:
+        # 로그인 링크 만들기
+        flow = Flow.from_client_config(
+            flow_config, scopes=SCOPES, redirect_uri=redirect_uri
+        )
+        auth_url, _ = flow.authorization_url(
+            access_type="offline",
+            prompt="consent"
+        )
+        st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
+
 else:
-    # ─── 인증된 상태 ───
-    creds   = st.session_state.credentials
+    # ─── 인증 완료 ───
+    creds   = st.session_state["credentials"]
     request = Request()
-    idinfo  = id_token.verify_oauth2_token(creds.id_token, request, client_id)
+    idinfo  = id_token.verify_oauth2_token(
+        creds.id_token,
+        request,
+        client_id
+    )
 
-     # 1) YouTube Data API 클라이언트
-    service = build("sheets", "v4", credentials=creds)
-    yt = yt_build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
+    # Sheets & YouTube API 클라이언트
+    sheets_service = build("sheets", "v4", credentials=creds)
+    yt             = yt_build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
 
-    # idinfo.get 으로 안전하게 꺼내되, 없으면 이메일 앞 부분을 이름처럼 사용
     display_name = idinfo.get("name") or idinfo.get("email", "").split("@")[0]
     st.success(f"👋 안녕하세요, {display_name} 님!")
     st.write("📧 이메일:", idinfo["email"])
 
-    # 2) 입력 UI: 유튜브 영상 URL
+    # 유튜브 영상 등록 UI
     st.subheader("▶ 유튜브 영상 등록")
-    video_url = st.text_input("유튜브 URL을 붙여넣으세요")
+    video_url = st.text_input("🔗 유튜브 URL을 붙여넣으세요")
 
     if st.button("영상 등록"):
-        # 1) URL에서 video_id 추출
         match = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", video_url)
         if not match:
             st.error("❌ 올바른 YouTube URL이 아닙니다.")
         else:
             video_id = match.group(1)
-            # 2) YouTube API로 조회수 가져오기
             try:
                 resp = yt.videos().list(part="statistics", id=video_id).execute()
                 view_count = int(resp["items"][0]["statistics"].get("viewCount", 0))
@@ -107,13 +100,11 @@ else:
                 st.error(f"❌ YouTube API 호출 실패: {e}")
                 st.stop()
 
-            # 3) 현재 UTC 기준 타임스탬프 생성
-            from datetime import datetime
             timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-            today = timestamp.split(" ")[0]   # YYYY-MM-DD
+            today     = timestamp.split(" ")[0]
 
             # ── 중복 체크 ──
-            existing = service.spreadsheets().values().get(
+            existing = sheets_service.spreadsheets().values().get(
                 spreadsheetId=SPREADSHEET_ID,
                 range=f"{SHEET_NAME}!B:C"
             ).execute().get("values", [])
@@ -126,8 +117,8 @@ else:
                 st.stop()
             # ────────────────
 
-            # 4) 시트에 새 행으로 기록
-            service.spreadsheets().values().append(
+            # 기록
+            sheets_service.spreadsheets().values().append(
                 spreadsheetId=SPREADSHEET_ID,
                 range=f"{SHEET_NAME}!A:D",
                 valueInputOption="RAW",
@@ -139,6 +130,5 @@ else:
                 ]]}
             ).execute()
 
-            # 결과 출력
             st.success(f"✅ 현재 조회수: {view_count:,}회")
             st.success("✅ 스프레드시트에 저장되었습니다!")
