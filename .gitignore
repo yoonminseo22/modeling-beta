@@ -1,4 +1,6 @@
 client_secret.json
+streamlit-service.json
+
 
 # secrets
 .streamlit/secrets.toml
