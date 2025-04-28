@@ -8,6 +8,7 @@ import re
 from datetime import datetime, timedelta
 import numpy as np
 import matplotlib.pyplot as plt
+import urllib.parse
 
 # ── Secrets ──
 YOUTUBE_API_KEY = st.secrets["youtube"]["api_key"]
@@ -22,7 +23,6 @@ st.subheader("Google 계정으로 로그인하고, 조회수를 분석하세요!
 # ── OAuth2 설정 ──
 client_id     = st.secrets["google_oauth"]["client_id"]
 client_secret = st.secrets["google_oauth"]["client_secret"]
-# GCP에 등록된 Redirect URI (뒤에 슬래시 포함 여부까지 정확히 일치해야 함)
 redirect_uri  = "https://modeling-beta-1.streamlit.app/"
 SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
@@ -48,14 +48,11 @@ flow = st.session_state.flow
 
 # ── 인증 상태 체크 ──
 if "credentials" not in st.session_state:
-    # 1) 승인 URL 생성
     auth_url, _ = flow.authorization_url(access_type="offline", prompt="consent")
     st.markdown(f"[🔐 Google 로그인]({auth_url})")
 
-    # 2) 리디렉션 후 code 파라미터가 붙은 경우
     if "code" in st.query_params:
         st.error("자동 파싱이 실패했습니다. 아래 textarea에서 전체 URL을 복사→붙여넣기 해주세요.")
-        # JS로 전체 URL을 화면에 textarea로 찍어 줌
         st.markdown(
             """
             <script>
@@ -67,22 +64,25 @@ if "credentials" not in st.session_state:
             """,
             unsafe_allow_html=True,
         )
-        # 사용자가 복사한 전체 URL을 붙여넣도록 요청
         auth_response = st.text_input(
             "🔑 전체 URL을 여기에 붙여넣으세요",
-            placeholder="https://modeling-beta-1.streamlit.app/?code=4/XYZ...&state=..."
+            placeholder="전체 리디렉션 URL"
         )
         if auth_response:
             try:
+                # state 매칭을 위해 URL에서 state 파싱 후 강제로 설정
+                qs = urllib.parse.urlparse(auth_response).query
+                params = urllib.parse.parse_qs(qs)
+                returned_state = params.get("state", [""])[0]
+                flow.state = returned_state
+
                 flow.fetch_token(authorization_response=auth_response)
                 st.session_state.credentials = flow.credentials
-                # 쿼리 지우고 새로고침
                 st.experimental_rerun()
             except Exception as e:
                 st.error(f"❌ 인증 실패: {e}")
 
 else:
-    # ── 인증된 상태 ──
     creds = st.session_state.credentials
     request = Request()
     try:
@@ -91,16 +91,13 @@ else:
         st.error(f"❌ 토큰 검증 실패: {e}")
         st.stop()
 
-    # ── API 클라이언트 생성 ──
     service = build("sheets", "v4", credentials=creds)
     yt      = yt_build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
 
-    # ── 로그인 완료 UI ──
     display_name = idinfo.get("name") or idinfo["email"].split("@")[0]
     st.success(f"👋 안녕하세요, {display_name} 님!")
     st.write("📧 이메일:", idinfo["email"])
 
-    # ── 유튜브 영상 등록 ──
     st.subheader("▶ 유튜브 영상 등록")
     video_url = st.text_input("YouTube URL을 붙여넣으세요")
     if st.button("영상 등록"):
@@ -133,7 +130,6 @@ else:
                 st.success(f"✅ 조회수: {views:,}회")
                 st.success("✅ 스프레드시트에 저장되었습니다!")
 
-    # ── 회귀분석 및 예측 ──
     st.subheader("📊 회귀분석 및 예측")
     rows = service.spreadsheets().values().get(
         spreadsheetId=SPREADSHEET_ID, range=f"{SHEET_NAME}!B2:B"
