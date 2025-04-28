@@ -23,7 +23,7 @@ st.subheader("Google 계정으로 로그인하고, 조회수를 분석하세요!
 # ── OAuth2 설정 ──
 client_id     = st.secrets["google_oauth"]["client_id"]
 client_secret = st.secrets["google_oauth"]["client_secret"]
-redirect_uri  = "https://modeling-beta-1.streamlit.app"  # GCP에 정확히 등록된 URI
+redirect_uri  = "https://modeling-beta-1.streamlit.app"  # GCP에 정확히 등록된 URI (슬래시 없이)
 SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/spreadsheets",
@@ -48,37 +48,25 @@ flow = st.session_state.flow
 
 # ── 인증 상태 체크 ──
 if "credentials" not in st.session_state:
-    # 1) 로그인 링크 생성
-    auth_url, _ = flow.authorization_url(
+    # 1) 로그인 링크 생성 & state 저장
+    auth_url, oauth_state = flow.authorization_url(
         access_type="offline",
         prompt="consent"
     )
-    # 2) 생성된 state를 세션에 저장
-    st.session_state["oauth_state"] = flow.state
+    st.session_state["oauth_state"] = oauth_state
     st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
 
-    # 3) 리다이렉트 후 code 처리
+    # 2) 리디렉트 후 code 처리
     if "code" in st.query_params:
-        # 쿼리 파라미터 평탄화
         flat = {k: v[0] for k, v in st.query_params.items()}
         auth_response = redirect_uri + "?" + urllib.parse.urlencode(flat)
         try:
-            # 세션에 저장된 state를 복원
+            # 세션에 저장한 state 를 flow.state 에 복원
             flow.state = st.session_state.pop("oauth_state")
-            # 전체 리디렉션 URL로 토큰 교환
             flow.fetch_token(authorization_response=auth_response)
             st.session_state["credentials"] = flow.credentials
-            # URL 파라미터 제거 및 새로고침
-            st.query_params = {}
-            st.markdown(
-                """
-                <script>
-                  window.location.href = window.location.origin + window.location.pathname;
-                </script>
-                """,
-                unsafe_allow_html=True
-            )
-            st.stop()
+            st.experimental_set_query_params()   # query params 지우기
+            st.experimental_rerun()
         except Exception as e:
             st.error(f"❌ 인증 실패: {e}")
 
@@ -175,9 +163,9 @@ else:
                 if real_pos:
                     hours = real_pos[0].real
                     predict_dt = t0 + timedelta(hours=hours)
-                    st.write(f"🎯 조회수 1,000,000회 예상 시점: **{predict_dt}**")
+                    st.write(f"🎯 1,000,000회 예상 시점: **{predict_dt}**")
                 else:
-                    st.write("⚠️ 1,000,000회 달성 예측값이 없습니다.")
+                    st.write("⚠️ 예측값이 없습니다.")
 
                 fig, ax = plt.subplots()
                 ax.scatter(x, y, label="실제 값")
