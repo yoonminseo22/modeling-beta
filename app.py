@@ -49,14 +49,14 @@ def login_ui():
     sid = st.text_input("학번", key="login_sid")
     pw  = st.text_input("암호", type="password", key="login_pw")
     if st.button("로그인"):
-        rows = usr_sheet.get_all_records()
         hash_pw = sha256(pw.encode()).hexdigest()
-        for r in rows:
-            if r["학번"] == sid and r["암호(해시)"] == hash_pw:
-                st.session_state["user"] = r
-                st.success(f"👋 환영합니다, {r['이름']}님!")
-                return
-        st.error("❌ 로그인 정보가 일치하지 않습니다.")
+        st.write("👉 입력 비번 해시:", hash_pw)
+        st.write("👉 시트에 저장된 첫 유저 해시:", rows[0].get("암호(해시)"))
+        # 실제 비교
+        if any(r["학번"]==sid and r["암호(해시)"]==hash_pw for r in rows):
+            st.success("로그인 성공")
+        else:
+            st.error("로그인 정보가 일치하지 않습니다.")
 
 
 # 유튜브 영상 ID 추출
