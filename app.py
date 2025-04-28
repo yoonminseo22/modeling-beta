@@ -22,7 +22,7 @@ st.subheader("Google 계정으로 로그인하고, 조회수를 분석하세요!
 # ── OAuth2 설정 ──
 client_id     = st.secrets["google_oauth"]["client_id"]
 client_secret = st.secrets["google_oauth"]["client_secret"]
-# 반드시 GCP에 등록된 리디렉트 URI와 **완전 동일**해야 합니다.
+# GCP에 등록된 Redirect URI (뒤에 슬래시 포함 여부까지 정확히 일치해야 함)
 redirect_uri  = "https://modeling-beta-1.streamlit.app/"
 SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
@@ -52,41 +52,34 @@ if "credentials" not in st.session_state:
     auth_url, _ = flow.authorization_url(access_type="offline", prompt="consent")
     st.markdown(f"[🔐 Google 로그인]({auth_url})")
 
-    # 2) 리디렉션 후 코드 처리: 전체 URL을 fetch_token에 넘깁니다.
+    # 2) 리디렉션 후 code 파라미터가 붙은 경우
     if "code" in st.query_params:
-        # 브라우저가 보고 있는 전체 URL을 JS로 얻어와서 Python으로 전달
+        st.error("자동 파싱이 실패했습니다. 아래 textarea에서 전체 URL을 복사→붙여넣기 해주세요.")
+        # JS로 전체 URL을 화면에 textarea로 찍어 줌
         st.markdown(
             """
             <script>
-              // 전체 URL을 data-auth-url 속성에 기록
-              document.body.setAttribute(
-                'data-auth-url', 
-                window.location.href
-              );
+              const ta = document.createElement('textarea');
+              ta.value = window.location.href;
+              ta.style = 'width:100%;height:120px;font-size:12px;';
+              document.body.appendChild(ta);
             </script>
             """,
             unsafe_allow_html=True,
         )
-        # Streamlit이 이 속성을 읽어 올 때까지 잠깐 멈춤
-        auth_response = st.selectbox(
-            "🚀 리디렉션된 전체 URL을 선택하세요",
-            [st.get_element("body").attrs.get("data-auth-url", "")]
+        # 사용자가 복사한 전체 URL을 붙여넣도록 요청
+        auth_response = st.text_input(
+            "🔑 전체 URL을 여기에 붙여넣으세요",
+            placeholder="https://modeling-beta-1.streamlit.app/?code=4/XYZ...&state=..."
         )
-        try:
-            flow.fetch_token(authorization_response=auth_response)
-            st.session_state.credentials = flow.credentials
-            # URL에서 쿼리 지우고 새로고침
-            st.markdown(
-                """
-                <script>
-                  window.location.href = window.location.href.split('?')[0];
-                </script>
-                """,
-                unsafe_allow_html=True,
-            )
-            st.stop()
-        except Exception as e:
-            st.error(f"❌ 인증 실패: {e}")
+        if auth_response:
+            try:
+                flow.fetch_token(authorization_response=auth_response)
+                st.session_state.credentials = flow.credentials
+                # 쿼리 지우고 새로고침
+                st.experimental_rerun()
+            except Exception as e:
+                st.error(f"❌ 인증 실패: {e}")
 
 else:
     # ── 인증된 상태 ──
@@ -130,16 +123,15 @@ else:
             ).execute().get("values", [])
             if any(v==vid and t.startswith(today) for v,t in vals):
                 st.info("ℹ️ 오늘 이미 등록된 영상입니다.")
-                st.stop()
-
-            service.spreadsheets().values().append(
-                spreadsheetId=SPREADSHEET_ID,
-                range=f"{SHEET_NAME}!A:D",
-                valueInputOption="RAW",
-                body={"values":[[idinfo["email"], vid, ts, views]]}
-            ).execute()
-            st.success(f"✅ 조회수: {views:,}회")
-            st.success("✅ 스프레드시트에 저장되었습니다!")
+            else:
+                service.spreadsheets().values().append(
+                    spreadsheetId=SPREADSHEET_ID,
+                    range=f"{SHEET_NAME}!A:D",
+                    valueInputOption="RAW",
+                    body={"values":[[idinfo["email"], vid, ts, views]]}
+                ).execute()
+                st.success(f"✅ 조회수: {views:,}회")
+                st.success("✅ 스프레드시트에 저장되었습니다!")
 
     # ── 회귀분석 및 예측 ──
     st.subheader("📊 회귀분석 및 예측")
