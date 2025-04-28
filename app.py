@@ -23,7 +23,7 @@ st.subheader("Google 계정으로 로그인하고, 조회수를 분석하세요!
 # ── OAuth2 설정 ──
 client_id     = st.secrets["google_oauth"]["client_id"]
 client_secret = st.secrets["google_oauth"]["client_secret"]
-redirect_uri  = "https://modeling-beta-1.streamlit.app"  # GCP에 정확히 등록된 URI (슬래시 없이)
+redirect_uri  = "https://modeling-beta-1.streamlit.app/"  # GCP에 정확히 등록된 URI 끝에 슬래시 포함
 SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/spreadsheets",
@@ -39,7 +39,7 @@ flow_config = {
     }
 }
 
-# ── Flow 객체를 세션에서 딱 한 번만 생성 ──
+# Flow 객체를 세션에 딱 한 번만 생성
 if "flow" not in st.session_state:
     st.session_state.flow = Flow.from_client_config(
         flow_config, scopes=SCOPES, redirect_uri=redirect_uri
@@ -48,30 +48,27 @@ flow = st.session_state.flow
 
 # ── 인증 상태 체크 ──
 if "credentials" not in st.session_state:
-    # 1) 로그인 링크 생성 & state 저장
-    auth_url, oauth_state = flow.authorization_url(
-        access_type="offline",
-        prompt="consent"
-    )
-    st.session_state["oauth_state"] = oauth_state
+    # 1) 승인 URL 생성
+    auth_url, _ = flow.authorization_url(access_type="offline", prompt="consent")
     st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
 
-    # 2) 리디렉트 후 code 처리
+    # 2) 리디렉트 후 코드 처리
     if "code" in st.query_params:
+        # 쿼리 파라미터 평탄화
         flat = {k: v[0] for k, v in st.query_params.items()}
+        # 전체 리디렉션 URL 재구성
         auth_response = redirect_uri + "?" + urllib.parse.urlencode(flat)
         try:
-            # 세션에 저장한 state 를 flow.state 에 복원
-            flow.state = st.session_state.pop("oauth_state")
             flow.fetch_token(authorization_response=auth_response)
+            # 세션에 자격 저장
             st.session_state["credentials"] = flow.credentials
-            st.experimental_set_query_params()   # query params 지우기
+            # URL 파라미터 제거 & 페이지 리로드
+            st.query_params = {}
             st.experimental_rerun()
         except Exception as e:
             st.error(f"❌ 인증 실패: {e}")
-
 else:
-    # ── 이미 인증된 상태 ──
+    # ── 인증된 상태 ──
     creds = st.session_state["credentials"]
     request = Request()
     try:
@@ -92,6 +89,7 @@ else:
     # ── 유튜브 영상 등록 ──
     st.subheader("▶ 유튜브 영상 등록")
     video_url = st.text_input("유튜브 URL을 붙여넣으세요")
+
     if st.button("영상 등록"):
         match = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", video_url)
         if not match:
@@ -111,7 +109,7 @@ else:
                 spreadsheetId=SPREADSHEET_ID,
                 range=f"{SHEET_NAME}!B:C"
             ).execute().get("values", [])
-            if any(vid == video_id and ts.startswith(today) for vid, ts in existing):
+            if any(vid==video_id and ts.startswith(today) for vid, ts in existing):
                 st.info("ℹ️ 오늘 이미 등록된 영상입니다.")
                 st.stop()
 
@@ -120,10 +118,7 @@ else:
                 range=f"{SHEET_NAME}!A:D",
                 valueInputOption="RAW",
                 body={"values": [[
-                    idinfo["email"],
-                    video_id,
-                    timestamp,
-                    view_count
+                    idinfo["email"], video_id, timestamp, view_count
                 ]]}
             ).execute()
             st.success(f"✅ 조회수: {view_count:,}회")
@@ -143,35 +138,31 @@ else:
                 spreadsheetId=SPREADSHEET_ID,
                 range=f"{SHEET_NAME}!A2:D"
             ).execute().get("values", [])
-            pts = [
-                (datetime.strptime(ts, "%Y-%m-%d %H:%M:%S"), int(vc))
-                for email, vid, ts, vc in full if vid == sel_video
-            ]
+            pts = []
+            for email, vid, ts, vc in full:
+                if vid == sel_video:
+                    dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+                    pts.append((dt, int(vc)))
             if len(pts) < 3:
                 st.error("데이터가 3개 미만이어서 2차회귀분석을 할 수 없습니다.")
             else:
                 pts.sort(key=lambda x: x[0])
                 t0 = pts[0][0]
-                x = np.array([(dt - t0).total_seconds() / 3600 for dt, _ in pts])
-                y = np.array([vc for _, vc in pts])
-
+                x = np.array([(dt - t0).total_seconds()/3600 for dt,_ in pts])
+                y = np.array([vc for _,vc in pts])
                 a, b, c = np.polyfit(x, y, 2)
                 st.latex(rf"조회수 = {a:.3f} x^2 + {b:.3f} x + {c:.3f}")
-
                 roots = np.roots([a, b, c - 1_000_000])
-                real_pos = [r for r in roots if np.isreal(r) and r > 0]
+                real_pos = [r for r in roots if np.isreal(r) and r>0]
                 if real_pos:
-                    hours = real_pos[0].real
-                    predict_dt = t0 + timedelta(hours=hours)
-                    st.write(f"🎯 1,000,000회 예상 시점: **{predict_dt}**")
+                    predict_dt = t0 + timedelta(hours=real_pos[0].real)
+                    st.write(f"🎯 100만회 예상 시점: **{predict_dt}**")
                 else:
-                    st.write("⚠️ 예측값이 없습니다.")
-
+                    st.write("⚠️ 1,000,000회 달성 예측값이 없습니다.")
                 fig, ax = plt.subplots()
                 ax.scatter(x, y, label="실제 값")
-                xs = np.linspace(0, x.max() * 1.1, 200)
-                ys = a * xs**2 + b * xs + c
-                ax.plot(xs, ys, label="2차 회귀곡선")
+                xs = np.linspace(0, x.max()*1.1, 200)
+                ax.plot(xs, a*xs**2 + b*xs + c, label="2차 회귀곡선")
                 ax.set_xlabel("시간 경과 (시간)")
                 ax.set_ylabel("조회수")
                 ax.legend()
