@@ -6,7 +6,6 @@ import hashlib
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from hashlib import sha256
 from datetime import datetime
 from oauth2client.service_account import ServiceAccountCredentials
 
@@ -86,27 +85,45 @@ def login_ui():
 
         # 이미 해시된 비밀번호
         pw_hash = hash_password(pwd)
-
-        # 일치하는 레코드 찾기
-        user = next((r for r in rows if r["학번"] == sid_int), None)
-
+        # 학번으로 회원 찾기
+        user = next((r for r in rows if str(r["학번"]) == sid), None)
         if not user:
-            st.error("등록되지 않은 학번입니다.")
+            st.error("❌ 등록되지 않은 학번입니다.")
             return
 
-        # 해시 비교
-        if user["암호(해시)"] == pw_hash:
-            st.success(f"환영합니다, {user['이름']}님!")
-            # 이후 화면 전환 등
-        else:
-            st.error("비밀번호가 일치하지 않습니다.")
+        # 비밀번호 해시 비교
+        if user.get("암호(해시)") != pw_hash:
+            st.error("❌ 비밀번호가 일치하지 않습니다.")
+            return
 
-        
         # 로그인 성공!
         st.session_state["logged_in"] = True
         st.session_state["user"] = user
         st.success(f"🎉 환영합니다, {user['이름']}님!")
-        st.experimental_rerun()  # 화면을 껐다 켜듯 재실행
+        st.experimental_rerun()
+
+# 유튜브 영상 ID 추출
+def extract_video_id(url):
+    import re
+    m = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", url)
+    return m.group(1) if m else None
+
+# 조회수 API 호출
+def get_video_statistics(video_id):
+    url = (
+        f"https://www.googleapis.com/youtube/v3/videos"
+        f"?part=statistics&id={video_id}&key={YOUTUBE_API_KEY}"
+    )
+    r = requests.get(url).json()
+    items = r.get("items")
+    if items:
+        stats = items[0]["statistics"]
+        return {
+            "viewCount": int(stats.get("viewCount", 0)),
+            "likeCount": int(stats.get("likeCount", 0)),
+            "commentCount": int(stats.get("commentCount", 0)),
+        }
+    return None
 
 # --- 8) 메인 화면(로그인 후) ---
 def main_ui():
@@ -184,31 +201,6 @@ def main_ui():
         a = coef[0] if len(coef)>0 else 1
         pred = a * np.sqrt(budget)
         st.write(f"예상 추가 조회수: {int(pred):,}회")
-
-
-# 유튜브 영상 ID 추출
-def extract_video_id(url):
-    import re
-    m = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", url)
-    return m.group(1) if m else None
-
-# 조회수 API 호출
-def get_video_statistics(video_id):
-    url = (
-        f"https://www.googleapis.com/youtube/v3/videos"
-        f"?part=statistics&id={video_id}&key={YOUTUBE_API_KEY}"
-    )
-    r = requests.get(url).json()
-    items = r.get("items")
-    if items:
-        stats = items[0]["statistics"]
-        return {
-            "viewCount": int(stats.get("viewCount", 0)),
-            "likeCount": int(stats.get("likeCount", 0)),
-            "commentCount": int(stats.get("commentCount", 0)),
-        }
-    return None
-
 
 # === 메인 탭 구조 ===
 tab1, tab2 = st.tabs(["로그인", "회원가입"])
