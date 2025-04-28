@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 from google_auth_oauthlib.flow import Flow
 from google.auth.transport.requests import Request
@@ -54,15 +55,16 @@ if "credentials" not in st.session_state:
 
     # 2) 리디렉트 후 코드 처리
     params = st.query_params
-    if "code" in params:
-        code = params["code"][0]
+    if "code" in params and "state" in params:
+        code  = params["code"][0]
+        state = params["state"][0]
         try:
-            # 전체 리디렉트 URL을 만들어 authorization_response로 사용
-            auth_response = f"{redirect_uri}?code={code}"
+            # state와 code를 모두 포함한 URL로 fetch
+            auth_response = f"{redirect_uri}?state={state}&code={code}"
             flow.fetch_token(authorization_response=auth_response)
             # 세션에 자격 저장
             st.session_state["credentials"] = flow.credentials
-            # URL에서 ?code 제거
+            # URL에서 ?code & state 제거
             st.query_params = {}
             # JS 리다이렉트로 페이지 새로고침
             st.markdown(
@@ -210,3 +212,4 @@ else:
                 st.pyplot(fig)
     else:
         st.info("아직 등록된 영상이 없습니다.")
+```
