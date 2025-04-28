@@ -20,7 +20,8 @@ st.subheader("Google 계정으로 로그인하고, 조회수를 분석하세요!
 # ── OAuth2 설정 ──
 client_id     = st.secrets["google_oauth"]["client_id"]
 client_secret = st.secrets["google_oauth"]["client_secret"]
-redirect_uri  = "https://modeling-beta-1.streamlit.app"
+# ← 끝에 슬래시( / )를 반드시 포함하세요.
+redirect_uri  = "https://modeling-beta-1.streamlit.app/"
 SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/spreadsheets",
@@ -58,12 +59,12 @@ if "credentials" not in st.session_state:
         code  = params["code"][0]
         state = params["state"][0]
         try:
-            # state와 code를 모두 포함한 URL로 fetch
+            # state 와 code 를 모두 포함한 URL 로 fetch
             auth_response = f"{redirect_uri}?state={state}&code={code}"
             flow.fetch_token(authorization_response=auth_response)
             # 세션에 자격 저장
             st.session_state["credentials"] = flow.credentials
-            # URL에서 ?code & state 제거
+            # URL에서 ?state & code 제거
             st.query_params = {}
             # JS 리다이렉트로 페이지 새로고침
             st.markdown(
@@ -147,7 +148,7 @@ else:
             # 결과 표시
             st.success(f"✅ 현재 조회수: {view_count:,}회")
             st.success("✅ 스프레드시트에 저장되었습니다!")
-            
+
     import numpy as np
     import matplotlib.pyplot as plt
     from datetime import datetime, timedelta
@@ -166,7 +167,6 @@ else:
         sel_video = st.selectbox("분석할 비디오 ID를 선택하세요", video_ids)
 
         if st.button("분석 시작"):
-            # 2) 해당 비디오의 (timestamp, view_count) 기록을 가져오기
             full = service.spreadsheets().values().get(
                 spreadsheetId=SPREADSHEET_ID,
                 range=f"{SHEET_NAME}!A2:D"
@@ -179,17 +179,14 @@ else:
             if len(pts) < 3:
                 st.error("데이터가 3개 미만이어서 2차회귀분석을 할 수 없습니다.")
             else:
-                # 3) 시간 간격(시간 단위) 계산
                 pts.sort(key=lambda x: x[0])
                 t0 = pts[0][0]
                 x = np.array([ (dt - t0).total_seconds()/3600 for dt,_ in pts ])
                 y = np.array([ vc for _,vc in pts ])
 
-                # 4) 2차회귀(이차함수) 계수 구하기
                 a, b, c = np.polyfit(x, y, 2)
                 st.latex(rf"조회수 = {a:.3f} x^2 + {b:.3f} x + {c:.3f}")
 
-                # 5) 100만 조회 시점 예측
                 roots = np.roots([a, b, c - 1_000_000])
                 real_pos = [ r for r in roots if np.isreal(r) and r>0 ]
                 if real_pos:
@@ -199,7 +196,6 @@ else:
                 else:
                     st.write("⚠️ 1,000,000회 달성 예측값이 없습니다.")
 
-                # 6) 그래프 그리기
                 fig, ax = plt.subplots()
                 ax.scatter(x, y, label="실제 값")
                 xs = np.linspace(0, x.max()*1.1, 200)
