@@ -15,6 +15,14 @@ st.set_page_config("📈 유튜브 조회수 분석기", layout="centered")
 st.title("📈 유튜브 조회수 분석기")
 st.subheader("학생용 로그인/회원가입")
 
+
+# --- 1) 세션 상태 초기화 ---
+if "logged_in" not in st.session_state:
+    st.session_state["logged_in"] = False
+if "user" not in st.session_state:
+    st.session_state["user"] = None
+
+
 # --- 1) 구글 서비스 계정으로 스프레드시트 인증 ---
 scope = ["https://spreadsheets.google.com/feeds","https://www.googleapis.com/auth/drive"]
 creds_dict = st.secrets["gcp_service_account"]
@@ -65,9 +73,6 @@ def signup_ui():
 def login_ui():
     st.header("🔐 로그인")
 
-    rows = usr_sheet.get_all_records()
-    st.write("▶ DB rows:", rows)  # (디버깅용)
-
     sid = st.text_input("학번", key="login_sid")
     pwd = st.text_input("비밀번호", type="password", key="login_pwd")
 
@@ -95,50 +100,20 @@ def login_ui():
             # 이후 화면 전환 등
         else:
             st.error("비밀번호가 일치하지 않습니다.")
-                
-# 로그인 완료 후 간단 메시지
-if st.session_state.get("logged_in"):
-    st.write("🔐 로그인 되었습니다. 유튜브 조회수 분석으로 이동하세요.")
 
+        
+        # 로그인 성공!
+        st.session_state["logged_in"] = True
+        st.session_state["user"] = user
+        st.success(f"🎉 환영합니다, {user['이름']}님!")
+        st.experimental_rerun()  # 화면을 껐다 켜듯 재실행
 
-# 유튜브 영상 ID 추출
-def extract_video_id(url):
-    import re
-    m = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", url)
-    return m.group(1) if m else None
-
-# 조회수 API 호출
-def get_video_statistics(video_id):
-    url = (
-        f"https://www.googleapis.com/youtube/v3/videos"
-        f"?part=statistics&id={video_id}&key={YOUTUBE_API_KEY}"
-    )
-    r = requests.get(url).json()
-    items = r.get("items")
-    if items:
-        stats = items[0]["statistics"]
-        return {
-            "viewCount": int(stats.get("viewCount", 0)),
-            "likeCount": int(stats.get("likeCount", 0)),
-            "commentCount": int(stats.get("commentCount", 0)),
-        }
-    return None
-
-
-# === 메인 탭 구조 ===
-tab1, tab2 = st.tabs(["로그인", "회원가입"])
-
-with tab2:
-    signup_ui()
-
-with tab1:
-    if "user" not in st.session_state:
-        login_ui()
-        st.stop()  # 로그인 전에는 나머지 화면 비활성화
+# --- 8) 메인 화면(로그인 후) ---
+def main_ui():
     user = st.session_state["user"]
-
-    st.sidebar.success(f"👋 {user['이름']}님 반갑습니다")
-
+    st.sidebar.success(f"👋 {user['이름']}님, 반갑습니다!")
+    st.title("📈 유튜브 조회수 분석기")
+    st.write("로그인에 성공했습니다! 이곳에서 유튜브 분석 기능을 사용하세요.")
     st.title("📈 유튜브 조회수 기록 / 분석")
 
     # ---- 유튜브 조회수 기록 ----
@@ -209,3 +184,42 @@ with tab1:
         a = coef[0] if len(coef)>0 else 1
         pred = a * np.sqrt(budget)
         st.write(f"예상 추가 조회수: {int(pred):,}회")
+
+
+# 유튜브 영상 ID 추출
+def extract_video_id(url):
+    import re
+    m = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", url)
+    return m.group(1) if m else None
+
+# 조회수 API 호출
+def get_video_statistics(video_id):
+    url = (
+        f"https://www.googleapis.com/youtube/v3/videos"
+        f"?part=statistics&id={video_id}&key={YOUTUBE_API_KEY}"
+    )
+    r = requests.get(url).json()
+    items = r.get("items")
+    if items:
+        stats = items[0]["statistics"]
+        return {
+            "viewCount": int(stats.get("viewCount", 0)),
+            "likeCount": int(stats.get("likeCount", 0)),
+            "commentCount": int(stats.get("commentCount", 0)),
+        }
+    return None
+
+
+# === 메인 탭 구조 ===
+tab1, tab2 = st.tabs(["로그인", "회원가입"])
+with tab1:
+    if not st.session_state["logged_in"]:
+        login_ui()
+    else:
+        main_ui()
+
+with tab2:
+    if not st.session_state["logged_in"]:
+        signup_ui()
+    else:
+        st.info("이미 로그인된 상태입니다.")
