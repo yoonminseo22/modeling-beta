@@ -72,7 +72,7 @@ def signup_ui():
 # 로그인 UI
 def login_ui():
     st.header("🔐 로그인")
-
+    rows = usr_sheet.get_all_records()
     sid = st.text_input("학번", key="login_sid")
     pwd = st.text_input("비밀번호", type="password", key="login_pwd")
 
