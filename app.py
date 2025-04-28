@@ -4,7 +4,8 @@ import hashlib
 
 # 1) 시트 연결
 gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
-SHEET_KEY = st.secrets["sheets"]["students_sheet_key"]
+SHEET_KEY  = st.secrets["sheets"]["spreadsheet_id"]
+SHEET_NAME = st.secrets["sheets"]["sheet_name"]
 sheet = gc.open_by_key(SHEET_KEY).sheet1
 
 # 2) 비밀번호 해시 함수
