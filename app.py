@@ -211,4 +211,3 @@ else:
                 st.pyplot(fig)
     else:
         st.info("아직 등록된 영상이 없습니다.")
-```
