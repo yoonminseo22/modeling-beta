@@ -6,7 +6,6 @@ from googleapiclient.discovery import build
 from googleapiclient.discovery import build as yt_build
 import re
 from datetime import datetime, timedelta
-import urllib.parse
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -39,7 +38,7 @@ flow_config = {
     }
 }
 
-# ── Flow 객체는 세션에 한 번만 생성 ──
+# ── Flow 객체를 세션에 한 번만 생성 ──
 if "flow" not in st.session_state:
     st.session_state.flow = Flow.from_client_config(
         flow_config, scopes=SCOPES, redirect_uri=redirect_uri
@@ -48,43 +47,24 @@ flow = st.session_state.flow
 
 # ── 인증 상태 체크 ──
 if "credentials" not in st.session_state:
-    # 1) 승인 URL 생성 & state 저장 (한 번만!)
-    auth_url, auth_state = flow.authorization_url(
-        access_type="offline",
-        prompt="consent"
-    )
-    st.session_state["oauth_state"] = auth_state
-
-    # 디버그용: 생성된 state 확인
-    st.write("▶ 생성된 state:", auth_state)
+    # 1) 승인 URL 생성
+    auth_url, _ = flow.authorization_url(access_type="offline", prompt="consent")
     st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
 
-    # 2) 리디렉션으로 돌아온 후 코드 처리
+    # 2) 리디렉션 후 코드 처리
     if "code" in st.query_params:
-        # 구글이 돌려준 state
-        returned_state = st.query_params.get("state", [""])[0]
-        st.write("▶ 리턴된 state:", returned_state)
-        st.write("▶ 세션의 oauth_state:", st.session_state["oauth_state"])
-
-        # CSRF 보호: 두 값이 일치해야만 다음으로 진행
-        if returned_state != st.session_state["oauth_state"]:
-            st.error("❌ CSRF state 불일치! 인증을 다시 시도하세요.")
-            st.stop()
-
-        # 파라미터 평탄화 및 토큰 요청
-        flat = {k: v[0] for k, v in st.query_params.items()}
-        auth_response = redirect_uri + "?" + urllib.parse.urlencode(flat)
+        code = st.query_params["code"][0]
         try:
-            flow.fetch_token(authorization_response=auth_response)
+            flow.fetch_token(code=code)
             st.session_state["credentials"] = flow.credentials
-            # URL 파라미터 제거 후 새로고침
+            # 파라미터 제거 후 새로고침
             st.query_params = {}
             st.experimental_rerun()
         except Exception as e:
             st.error(f"❌ 인증 실패: {e}")
 
 else:
-    # ── 이미 인증된 상태 ──
+    # ── 인증된 상태 ──
     creds = st.session_state["credentials"]
     request = Request()
     try:
@@ -93,7 +73,7 @@ else:
         st.error(f"❌ 토큰 검증 실패: {e}")
         st.stop()
 
-    # ── Sheets & YouTube API 클라이언트 생성 ──
+    # ── API 클라이언트 생성 ──
     service = build("sheets", "v4", credentials=creds)
     yt      = yt_build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
 
@@ -153,32 +133,29 @@ else:
                 spreadsheetId=SPREADSHEET_ID,
                 range=f"{SHEET_NAME}!A2:D"
             ).execute().get("values", [])
-            pts = []
-            for email, vid, ts, vc in full:
-                if vid == sel_video:
-                    dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
-                    pts.append((dt, int(vc)))
+            pts = [(datetime.strptime(ts, "%Y-%m-%d %H:%M:%S"), int(vc))
+                   for _, vid, ts, vc in full if vid==sel_video]
             if len(pts) < 3:
                 st.error("데이터가 3개 미만이어서 2차회귀분석을 할 수 없습니다.")
             else:
                 pts.sort(key=lambda x: x[0])
                 t0 = pts[0][0]
-                x = np.array([ (dt - t0).total_seconds()/3600 for dt,_ in pts ])
-                y = np.array([ vc for _,vc in pts ])
-                a, b, c = np.polyfit(x, y, 2)
-                st.latex(rf"조회수 = {a:.3f} x^2 + {b:.3f} x + {c:.3f}")
-                roots = np.roots([a, b, c - 1_000_000])
-                real_pos = [ r for r in roots if np.isreal(r) and r>0 ]
-                if real_pos:
-                    predict_dt = t0 + timedelta(hours=real_pos[0].real)
-                    st.write(f"🎯 100만회 예상 시점: **{predict_dt}**")
+                x = np.array([(dt-t0).total_seconds()/3600 for dt,_ in pts])
+                y = np.array([vc for _,vc in pts])
+                a,b,c = np.polyfit(x,y,2)
+                st.latex(rf"조회수 = {a:.3f}x² + {b:.3f}x + {c:.3f}")
+                roots = np.roots([a,b,c-1_000_000])
+                real = [r.real for r in roots if np.isreal(r) and r>0]
+                if real:
+                    pd = t0 + timedelta(hours=real[0])
+                    st.write(f"🎯 100만회 예상 시점: **{pd}**")
                 else:
-                    st.write("⚠️ 1,000,000회 달성 예측이 불가능합니다.")
-                fig, ax = plt.subplots()
-                ax.scatter(x, y, label="실제 값")
-                xs = np.linspace(0, x.max()*1.1, 200)
-                ax.plot(xs, a*xs**2 + b*xs + c, label="2차 회귀곡선")
-                ax.set_xlabel("시간 경과 (시간)")
+                    st.write("⚠️ 예측 불가")
+                fig,ax=plt.subplots()
+                ax.scatter(x,y,label="실제")
+                xs=np.linspace(0,x.max()*1.1,200)
+                ax.plot(xs,a*xs**2+b*xs+c,label="회귀곡선")
+                ax.set_xlabel("시간(시간)")
                 ax.set_ylabel("조회수")
                 ax.legend()
                 st.pyplot(fig)
