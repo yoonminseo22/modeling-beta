@@ -37,15 +37,21 @@ def hash_password(pw: str) -> str:
 def signup_ui():
     st.header("회원가입")
     sid = st.text_input("학번", key="signup_sid")
+    name = st.text_input("이름", key="signup_name")
     pwd = st.text_input("비밀번호", type="password", key="signup_pwd")
     if st.button("회원가입"):
+        # 입력 확인
+        if not sid or not name or not pwd:
+            st.error("학번, 이름, 비밀번호를 모두 입력해주세요.")
+            return
         rows = usr_sheet.get_all_records()
         if any(r["학번"] == sid for r in rows):
             st.error("이미 등록된 학번입니다.")
         else:
             pw_hash = hash_password(pwd)
-            usr_sheet.append_row([sid, pw_hash])
-            st.success("회원가입이 완료되었습니다!")
+            # 시트에 [학번, 이름, 해시된 비밀번호] 순으로 추가
+            usr_sheet.append_row([sid, name, pw_hash])
+            st.success(f"{name}님, 회원가입이 완료되었습니다!")
 
 # 로그인 UI
 def login_ui():
@@ -53,6 +59,10 @@ def login_ui():
     sid = st.text_input("학번", key="login_sid")
     pwd = st.text_input("비밀번호", type="password", key="login_pwd")
     if st.button("로그인"):
+        # 입력 확인
+        if not sid or not pwd:
+            st.error("학번과 비밀번호를 모두 입력해주세요.")
+            return
         rows = usr_sheet.get_all_records()
         target = next((r for r in rows if r["학번"] == sid), None)
         if not target:
