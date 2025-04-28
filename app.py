@@ -57,7 +57,9 @@ if "credentials" not in st.session_state:
     if "code" in params:
         code = params["code"][0]
         try:
-            flow.fetch_token(code=code)
+            # 전체 리디렉트 URL을 만들어 authorization_response로 사용
+            auth_response = f"{redirect_uri}?code={code}"
+            flow.fetch_token(authorization_response=auth_response)
             # 세션에 자격 저장
             st.session_state["credentials"] = flow.credentials
             # URL에서 ?code 제거
@@ -144,6 +146,7 @@ else:
             # 결과 표시
             st.success(f"✅ 현재 조회수: {view_count:,}회")
             st.success("✅ 스프레드시트에 저장되었습니다!")
+            
     import numpy as np
     import matplotlib.pyplot as plt
     from datetime import datetime, timedelta
@@ -152,7 +155,6 @@ else:
     st.subheader("📊 회귀분석 및 예측")
 
     # 1) 분석할 비디오 선택용 콤보박스
-    #    이미 시트에 등록된 video_id 리스트를 가져와서 중복 제거
     all_rows = service.spreadsheets().values().get(
         spreadsheetId=SPREADSHEET_ID,
         range=f"{SHEET_NAME}!B2:B"
@@ -164,13 +166,6 @@ else:
 
         if st.button("분석 시작"):
             # 2) 해당 비디오의 (timestamp, view_count) 기록을 가져오기
-            data = service.spreadsheets().values().get(
-                spreadsheetId=SPREADSHEET_ID,
-                range=f"{SHEET_NAME}!C2:D"
-            ).execute().get("values", [])
-            # C열: timestamp, D열: view_count
-            # 필터: video_id가 sel_video인 행만 추출
-            # (가정: A=이메일, B=video_id, C=timestamp, D=view_count)
             full = service.spreadsheets().values().get(
                 spreadsheetId=SPREADSHEET_ID,
                 range=f"{SHEET_NAME}!A2:D"
@@ -178,7 +173,6 @@ else:
             pts = []
             for email, vid, ts, vc in full:
                 if vid == sel_video:
-                    # ts 예: "2025-04-28 13:00:00"
                     dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
                     pts.append((dt, int(vc)))
             if len(pts) < 3:
@@ -195,9 +189,7 @@ else:
                 st.latex(rf"조회수 = {a:.3f} x^2 + {b:.3f} x + {c:.3f}")
 
                 # 5) 100만 조회 시점 예측
-                #    a x^2 + b x + (c - 1e6) = 0 을 풀기
                 roots = np.roots([a, b, c - 1_000_000])
-                # 양수 실근만
                 real_pos = [ r for r in roots if np.isreal(r) and r>0 ]
                 if real_pos:
                     hours = real_pos[0].real
@@ -208,9 +200,7 @@ else:
 
                 # 6) 그래프 그리기
                 fig, ax = plt.subplots()
-                # 원 데이터
                 ax.scatter(x, y, label="실제 값")
-                # 회귀 곡선
                 xs = np.linspace(0, x.max()*1.1, 200)
                 ys = a*xs**2 + b*xs + c
                 ax.plot(xs, ys, label="2차 회귀곡선")
