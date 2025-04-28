@@ -101,6 +101,7 @@ def login_ui():
         st.session_state["user"] = user
         st.success(f"🎉 환영합니다, {user['이름']}님!")
         st.experimental_rerun()
+        return
 
 # 유튜브 영상 ID 추출
 def extract_video_id(url):
