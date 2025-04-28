@@ -47,18 +47,16 @@ flow = st.session_state.flow
 
 # ── 인증 상태 체크 ──
 if "credentials" not in st.session_state:
-    # 1) 승인 URL 생성
     auth_url, _ = flow.authorization_url(access_type="offline", prompt="consent")
     st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
 
-    # 2) 리디렉션 후 코드 처리
     if "code" in st.query_params:
         code = st.query_params["code"][0]
+        st.write("🔑 받은 auth code:", code)  # 디버깅용
         try:
-            flow.fetch_token(code=code)
+            flow.fetch_token(code=code)  # code 파라미터만 사용
             st.session_state["credentials"] = flow.credentials
-            # 파라미터 제거 후 새로고침
-            st.query_params = {}
+            st.query_params = {}         # 파라미터 제거
             st.experimental_rerun()
         except Exception as e:
             st.error(f"❌ 인증 실패: {e}")
