@@ -8,7 +8,10 @@ import matplotlib.pyplot as plt
 from hashlib import sha256
 from datetime import datetime
 
-st.set_page_config("📈 유튜브 조회수 분석기", layout="wide")
+st.set_page_config("📈 유튜브 조회수 분석기", layout="centered")
+
+st.title("📈 유튜브 조회수 분석기")
+st.subheader("학생용 로그인/회원가입")
 
 # --- 1) 구글 서비스 계정으로 스프레드시트 인증 ---
 gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
@@ -25,50 +28,46 @@ yt_sheet  = yt_wb.worksheet(yt_conf["sheet_name"])
 usr_wb    = gc.open_by_key(usr_conf["spreadsheet_id"])
 usr_sheet = usr_wb.worksheet(usr_conf["sheet_name"])
 
+# 해시 함수
+def hash_password(pw: str) -> str:
+    return hashlib.sha256(pw.encode()).hexdigest()
+
 
 # ==== 회원가입 UI ====
 def signup_ui():
-    st.header("🔒 회원가입") 
+    st.header("회원가입")
     sid = st.text_input("학번", key="signup_sid")
-    name = st.text_input("이름", key="signup_name")
-    pw   = st.text_input("암호", type="password", key="signup_pw")
+    pwd = st.text_input("비밀번호", type="password", key="signup_pwd")
     if st.button("회원가입"):
         rows = usr_sheet.get_all_records()
         if any(r["학번"] == sid for r in rows):
-            st.error("❌ 이미 가입된 학번입니다.")
+            st.error("이미 등록된 학번입니다.")
         else:
-            hash_pw = sha256(pw.encode()).hexdigest()
-            # 학번 / 이름 / 암호(해시) / 가입일시
-            usr_sheet.append_row([sid, name, hash_pw, datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
-            st.success("✅ 회원가입 성공! 로그인 탭으로 이동하세요.")
+            pw_hash = hash_password(pwd)
+            usr_sheet.append_row([sid, pw_hash])
+            st.success("회원가입이 완료되었습니다!")
 
-
-# ==== 로그인 UI ====
+# 로그인 UI
 def login_ui():
+    st.header("로그인")
     sid = st.text_input("학번", key="login_sid")
-    pw  = st.text_input("암호", type="password", key="login_pw")
+    pwd = st.text_input("비밀번호", type="password", key="login_pwd")
     if st.button("로그인"):
-        # 1) 입력값 해시
-        hash_pw = sha256(pw.encode()).hexdigest()
-        st.write("👉 입력 비번 해시:", hash_pw)
-
-        # 2) 시트에서 rows 읽어 오고
-        worksheet = gc.open_by_key(SHEET_KEY).worksheet("회원DB")
-        rows = worksheet.get_all_records()
-        
-        # 3) rows[0] 구조 찍어보기
-        st.write("👉 rows[0] 전체:", rows[0])
-        st.write("👉 rows[0] 키 목록:", list(rows[0].keys()))
-        
-        # 4) 시트에 저장된 해시 확인
-        stored = rows[0].get("암호(해시)", None)
-        st.write("👉 시트에 저장된 해시:", stored)
-
-        # 5) 실제 로그인 매칭
-        if any(r["학번"]==sid and r.get("암호(해시)")==hash_pw for r in rows):
-            st.success("로그인 성공!")
+        rows = usr_sheet.get_all_records()
+        target = next((r for r in rows if r["학번"] == sid), None)
+        if not target:
+            st.error("등록되지 않은 학번입니다.")
         else:
-            st.error("로그인 정보가 일치하지 않습니다.")
+            if hash_password(pwd) == target["암호(해시)"]:
+                st.success(f"환영합니다, {sid}님!")
+                st.session_state["logged_in"] = sid
+            else:
+                st.error("비밀번호가 일치하지 않습니다.")
+
+                
+# 로그인 완료 후 간단 메시지
+if st.session_state.get("logged_in"):
+    st.write("🔐 로그인 되었습니다. 유튜브 조회수 분석으로 이동하세요.")
 
 
 # 유튜브 영상 ID 추출
