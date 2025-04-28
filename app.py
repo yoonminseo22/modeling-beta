@@ -9,12 +9,12 @@ from datetime import datetime, timedelta
 import numpy as np
 import matplotlib.pyplot as plt
 
-# ── 시크릿 불러오기 ──
+# ── Secrets ──
 YOUTUBE_API_KEY = st.secrets["youtube"]["api_key"]
 SPREADSHEET_ID  = st.secrets["sheets"]["spreadsheet_id"]
 SHEET_NAME      = st.secrets["sheets"]["sheet_name"]
 
-# ── 페이지 설정 ──
+# ── Page setup ──
 st.set_page_config(page_title="📈 유튜브 조회수 분석기", layout="centered")
 st.title("📈 유튜브 조회수 분석기")
 st.subheader("Google 계정으로 로그인하고, 조회수를 분석하세요!")
@@ -22,7 +22,8 @@ st.subheader("Google 계정으로 로그인하고, 조회수를 분석하세요!
 # ── OAuth2 설정 ──
 client_id     = st.secrets["google_oauth"]["client_id"]
 client_secret = st.secrets["google_oauth"]["client_secret"]
-redirect_uri  = "https://modeling-beta-1.streamlit.app/"  # GCP에 정확히 등록된 URI
+# 반드시 GCP에 등록된 리디렉트 URI와 **완전 동일**해야 합니다.
+redirect_uri  = "https://modeling-beta-1.streamlit.app/"
 SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/spreadsheets",
@@ -38,7 +39,7 @@ flow_config = {
     }
 }
 
-# ── Flow 객체를 세션에 한 번만 생성 ──
+# Flow 객체를 세션에 한 번만 생성
 if "flow" not in st.session_state:
     st.session_state.flow = Flow.from_client_config(
         flow_config, scopes=SCOPES, redirect_uri=redirect_uri
@@ -47,23 +48,49 @@ flow = st.session_state.flow
 
 # ── 인증 상태 체크 ──
 if "credentials" not in st.session_state:
+    # 1) 승인 URL 생성
     auth_url, _ = flow.authorization_url(access_type="offline", prompt="consent")
-    st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
+    st.markdown(f"[🔐 Google 로그인]({auth_url})")
 
+    # 2) 리디렉션 후 코드 처리: 전체 URL을 fetch_token에 넘깁니다.
     if "code" in st.query_params:
-        code = st.query_params["code"][0]
-        st.write("🔑 받은 auth code:", code)  # 디버깅용
+        # 브라우저가 보고 있는 전체 URL을 JS로 얻어와서 Python으로 전달
+        st.markdown(
+            """
+            <script>
+              // 전체 URL을 data-auth-url 속성에 기록
+              document.body.setAttribute(
+                'data-auth-url', 
+                window.location.href
+              );
+            </script>
+            """,
+            unsafe_allow_html=True,
+        )
+        # Streamlit이 이 속성을 읽어 올 때까지 잠깐 멈춤
+        auth_response = st.selectbox(
+            "🚀 리디렉션된 전체 URL을 선택하세요",
+            [st.get_element("body").attrs.get("data-auth-url", "")]
+        )
         try:
-            flow.fetch_token(code=code)  # code 파라미터만 사용
-            st.session_state["credentials"] = flow.credentials
-            st.query_params = {}         # 파라미터 제거
-            st.experimental_rerun()
+            flow.fetch_token(authorization_response=auth_response)
+            st.session_state.credentials = flow.credentials
+            # URL에서 쿼리 지우고 새로고침
+            st.markdown(
+                """
+                <script>
+                  window.location.href = window.location.href.split('?')[0];
+                </script>
+                """,
+                unsafe_allow_html=True,
+            )
+            st.stop()
         except Exception as e:
             st.error(f"❌ 인증 실패: {e}")
 
 else:
     # ── 인증된 상태 ──
-    creds = st.session_state["credentials"]
+    creds = st.session_state.credentials
     request = Request()
     try:
         idinfo = id_token.verify_oauth2_token(creds.id_token, request, client_id)
@@ -82,27 +109,26 @@ else:
 
     # ── 유튜브 영상 등록 ──
     st.subheader("▶ 유튜브 영상 등록")
-    video_url = st.text_input("유튜브 URL을 붙여넣으세요")
+    video_url = st.text_input("YouTube URL을 붙여넣으세요")
     if st.button("영상 등록"):
         match = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", video_url)
         if not match:
             st.error("❌ 올바른 YouTube URL이 아닙니다.")
         else:
-            video_id = match.group(1)
+            vid = match.group(1)
             try:
-                resp = yt.videos().list(part="statistics", id=video_id).execute()
-                view_count = int(resp["items"][0]["statistics"].get("viewCount", 0))
+                resp = yt.videos().list(part="statistics", id=vid).execute()
+                views = int(resp["items"][0]["statistics"].get("viewCount", 0))
             except Exception as e:
                 st.error(f"❌ YouTube API 호출 실패: {e}")
                 st.stop()
 
-            timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-            today     = timestamp.split(" ")[0]
-            existing = service.spreadsheets().values().get(
-                spreadsheetId=SPREADSHEET_ID,
-                range=f"{SHEET_NAME}!B:C"
+            ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            today = ts.split()[0]
+            vals = service.spreadsheets().values().get(
+                spreadsheetId=SPREADSHEET_ID, range=f"{SHEET_NAME}!B:C"
             ).execute().get("values", [])
-            if any(vid==video_id and ts.startswith(today) for vid,ts in existing):
+            if any(v==vid and t.startswith(today) for v,t in vals):
                 st.info("ℹ️ 오늘 이미 등록된 영상입니다.")
                 st.stop()
 
@@ -110,52 +136,50 @@ else:
                 spreadsheetId=SPREADSHEET_ID,
                 range=f"{SHEET_NAME}!A:D",
                 valueInputOption="RAW",
-                body={"values":[[
-                    idinfo["email"], video_id, timestamp, view_count
-                ]]}
+                body={"values":[[idinfo["email"], vid, ts, views]]}
             ).execute()
-            st.success(f"✅ 조회수: {view_count:,}회")
+            st.success(f"✅ 조회수: {views:,}회")
             st.success("✅ 스프레드시트에 저장되었습니다!")
 
     # ── 회귀분석 및 예측 ──
     st.subheader("📊 회귀분석 및 예측")
-    all_rows = service.spreadsheets().values().get(
-        spreadsheetId=SPREADSHEET_ID,
-        range=f"{SHEET_NAME}!B2:B"
+    rows = service.spreadsheets().values().get(
+        spreadsheetId=SPREADSHEET_ID, range=f"{SHEET_NAME}!B2:B"
     ).execute().get("values", [])
-    video_ids = sorted({ row[0] for row in all_rows if row })
-    if video_ids:
-        sel_video = st.selectbox("분석할 비디오 ID를 선택하세요", video_ids)
+    ids = sorted({r[0] for r in rows if r})
+    if ids:
+        sel = st.selectbox("분석할 비디오 ID를 선택하세요", ids)
         if st.button("분석 시작"):
-            full = service.spreadsheets().values().get(
-                spreadsheetId=SPREADSHEET_ID,
-                range=f"{SHEET_NAME}!A2:D"
+            data = service.spreadsheets().values().get(
+                spreadsheetId=SPREADSHEET_ID, range=f"{SHEET_NAME}!A2:D"
             ).execute().get("values", [])
-            pts = [(datetime.strptime(ts, "%Y-%m-%d %H:%M:%S"), int(vc))
-                   for _, vid, ts, vc in full if vid==sel_video]
-            if len(pts) < 3:
-                st.error("데이터가 3개 미만이어서 2차회귀분석을 할 수 없습니다.")
+            pts = []
+            for e,v,t,vw in data:
+                if v==sel:
+                    pts.append((datetime.strptime(t,"%Y-%m-%d %H:%M:%S"), int(vw)))
+            if len(pts)<3:
+                st.error("데이터가 3개 미만입니다.")
             else:
-                pts.sort(key=lambda x: x[0])
+                pts.sort()
                 t0 = pts[0][0]
-                x = np.array([(dt-t0).total_seconds()/3600 for dt,_ in pts])
-                y = np.array([vc for _,vc in pts])
+                x = np.array([(tt-t0).total_seconds()/3600 for tt,_ in pts])
+                y = np.array([vv for _,vv in pts])
                 a,b,c = np.polyfit(x,y,2)
                 st.latex(rf"조회수 = {a:.3f}x² + {b:.3f}x + {c:.3f}")
                 roots = np.roots([a,b,c-1_000_000])
-                real = [r.real for r in roots if np.isreal(r) and r>0]
-                if real:
-                    pd = t0 + timedelta(hours=real[0])
-                    st.write(f"🎯 100만회 예상 시점: **{pd}**")
+                rp = next((r.real for r in roots if np.isreal(r) and r>0), None)
+                if rp:
+                    pred = t0 + timedelta(hours=rp)
+                    st.write(f"🎯 100만회 예상 시점: **{pred}**")
                 else:
                     st.write("⚠️ 예측 불가")
-                fig,ax=plt.subplots()
-                ax.scatter(x,y,label="실제")
-                xs=np.linspace(0,x.max()*1.1,200)
-                ax.plot(xs,a*xs**2+b*xs+c,label="회귀곡선")
+                fig,ax = plt.subplots()
+                ax.scatter(x,y,label="실측")
+                xs = np.linspace(0,x.max()*1.1,200)
+                ax.plot(xs, a*xs**2+b*xs+c, label="회귀곡선")
                 ax.set_xlabel("시간(시간)")
                 ax.set_ylabel("조회수")
                 ax.legend()
                 st.pyplot(fig)
     else:
-        st.info("아직 등록된 영상이 없습니다.")
+        st.info("등록된 영상이 없습니다.")
