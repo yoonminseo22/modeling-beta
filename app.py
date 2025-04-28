@@ -64,6 +64,8 @@ def signup_ui():
 # 로그인 UI
 def login_ui():
     st.subheader("로그인")
+    rows = usr_sheet.get_all_records()
+    st.write("▶ DB rows:", rows)
     sid = st.text_input("학번", key="login_sid")
     pwd = st.text_input("비밀번호", type="password", key="login_pwd")
     if st.button("로그인"):
