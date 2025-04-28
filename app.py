@@ -63,27 +63,38 @@ def signup_ui():
 
 # 로그인 UI
 def login_ui():
-    st.subheader("로그인")
+    st.header("🔐 로그인")
+
     rows = usr_sheet.get_all_records()
-    st.write("▶ DB rows:", rows)
+    st.write("▶ DB rows:", rows)  # (디버깅용)
+
     sid = st.text_input("학번", key="login_sid")
     pwd = st.text_input("비밀번호", type="password", key="login_pwd")
-    if st.button("로그인"):
-        if not sid or not pwd:
-            st.error("학번과 비밀번호를 모두 입력해주세요.")
-            return
-        rows = usr_sheet.get_all_records()
-        for r in rows:
-            if r["학번"] == sid:
-                if r["암호(해시)"] == hash_password(pwd):
-                    st.success(f"환영합니다, {r['이름']}님!")
-                    return True
-                else:
-                    st.error("비밀번호가 일치하지 않습니다.")
-                    return False
-        st.error("등록되지 않은 학번입니다.")
-        return False
 
+    if st.button("로그인"):
+        # 숫자로 비교하고 싶으면:
+        try:
+            sid_int = int(sid)
+        except ValueError:
+            st.error("학번은 숫자여야 합니다.")
+            return
+
+        # 이미 해시된 비밀번호
+        pw_hash = hash_password(pwd)
+
+        # 일치하는 레코드 찾기
+        user = next((r for r in rows if r["학번"] == sid_int), None)
+
+        if not user:
+            st.error("등록되지 않은 학번입니다.")
+            return
+
+        # 해시 비교
+        if user["암호(해시)"] == pw_hash:
+            st.success(f"환영합니다, {user['이름']}님!")
+            # 이후 화면 전환 등
+        else:
+            st.error("비밀번호가 일치하지 않습니다.")
                 
 # 로그인 완료 후 간단 메시지
 if st.session_state.get("logged_in"):
