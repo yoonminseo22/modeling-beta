@@ -6,6 +6,7 @@ from googleapiclient.discovery import build
 from googleapiclient.discovery import build as yt_build
 import re
 from datetime import datetime
+import urllib.parse
 
 # ── 시크릿 불러오기 ──
 YOUTUBE_API_KEY = st.secrets["youtube"]["api_key"]
@@ -20,7 +21,7 @@ st.subheader("Google 계정으로 로그인하고, 조회수를 분석하세요!
 # ── OAuth2 설정 ──
 client_id     = st.secrets["google_oauth"]["client_id"]
 client_secret = st.secrets["google_oauth"]["client_secret"]
-redirect_uri  = "https://modeling-beta-1.streamlit.app/"  # GCP에 정확히 동일하게 등록
+redirect_uri  = "https://modeling-beta-1.streamlit.app/"  # GCP에 등록된 URI와 정확히 일치
 SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/spreadsheets",
@@ -36,7 +37,7 @@ flow_config = {
     }
 }
 
-# Flow 객체를 세션에 한 번만 생성
+# ── Flow 객체를 세션에서 단 1회 생성 ──
 if "flow" not in st.session_state:
     st.session_state.flow = Flow.from_client_config(
         flow_config, scopes=SCOPES, redirect_uri=redirect_uri
@@ -51,25 +52,24 @@ if "credentials" not in st.session_state:
     )
     st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
 
-    params = st.query_params
-    if "code" in params and "state" in params:
-        code  = params["code"][0]
-        state = params["state"][0]
+    # 사용자가 돌아오면 쿼리 파라미터에 code, state 등이 담겨 있습니다.
+    params = st.experimental_get_query_params()
+    if "code" in params:
+        # 1) 쿼리 파라미터를 평탄화
+        flat = {k: v[0] for k, v in params.items()}
+        # 2) redirect_uri + ? + urlencode 로 전체 URL 재구성
+        auth_response = redirect_uri + "?" + urllib.parse.urlencode(flat)
         try:
-            # Flow 내부 state를 리턴된 state로 덮어써서 CSRF 체크 우회
-            flow.state = state
-            flow.fetch_token(code=code)
-
-            # 자격증명 저장
+            # 전체 리디렉션 URL을 통째로 넘겨줍니다.
+            flow.fetch_token(authorization_response=auth_response)
+            # 토큰 저장
             st.session_state["credentials"] = flow.credentials
-            # URL 파라미터 지우고 새로고침
-            st.query_params = {}
+            # URL 깨끗이 지우고 새로고침
+            st.experimental_set_query_params()
             st.markdown(
-                """
-                <script>
-                  window.location.href = window.location.origin + window.location.pathname;
-                </script>
-                """,
+                """<script>
+                     window.location.href = window.location.origin + window.location.pathname;
+                   </script>""",
                 unsafe_allow_html=True
             )
             st.stop()
@@ -77,19 +77,19 @@ if "credentials" not in st.session_state:
             st.error(f"❌ 인증 실패: {e}")
 
 else:
-    creds   = st.session_state["credentials"]
+    creds = st.session_state["credentials"]
     request = Request()
     try:
-        idinfo  = id_token.verify_oauth2_token(
-            creds.id_token, request, client_id
-        )
+        idinfo = id_token.verify_oauth2_token(creds.id_token, request, client_id)
     except Exception as e:
         st.error(f"❌ 토큰 검증 실패: {e}")
         st.stop()
 
+    # ── API 클라이언트 생성 ──
     service = build("sheets", "v4", credentials=creds)
     yt      = yt_build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
 
+    # ── 로그인 완료 UI ──
     display_name = idinfo.get("name") or idinfo["email"].split("@")[0]
     st.success(f"👋 안녕하세요, {display_name} 님!")
     st.write("📧 이메일:", idinfo["email"])
