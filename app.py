@@ -33,8 +33,10 @@ usr_wb    = gc.open_by_key(usr_conf["spreadsheet_id"])
 usr_sheet = usr_wb.worksheet(usr_conf["sheet_name"])
 
 # 해시 함수
-def hash_password(pw):
-    return hashlib.sha256(pw.encode()).hexdigest()
+def hash_password(pw: str) -> str:
+    if not isinstance(pw, str) or pw == "":
+        return ""
+    return hashlib.sha256(pw.encode("utf-8")).hexdigest()
 
 
 # ==== 회원가입 UI ====
@@ -47,14 +49,17 @@ def signup_ui():
         if not sid or not name or not pwd:
             st.error("학번, 이름, 비밀번호를 모두 입력해주세요.")
             return
+        pw_hash = hash_password(pwd)
+        if pw_hash == "":
+            st.error("비밀번호 처리에 문제가 발생했습니다.")
+            return
         rows = usr_sheet.get_all_records()
         if any(r["학번"] == sid for r in rows):
             st.error("이미 등록된 학번입니다.")
         else:
-            pw_hash = hash_password(pwd)
             usr_sheet.append_row([sid, name, pw_hash])
             st.success(f"{name}님, 회원가입이 완료되었습니다!")
-
+            
 # 로그인 UI
 def login_ui():
     st.subheader("로그인")
