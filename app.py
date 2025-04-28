@@ -28,10 +28,10 @@ usr_sheet = usr_wb.worksheet(usr_conf["sheet_name"])
 
 # ==== 회원가입 UI ====
 def signup_ui():
-    st.header("🔒 회원가입")
-    sid  = st.text_input("학번")
-    name = st.text_input("이름")
-    pw   = st.text_input("암호", type="password")
+    st.header("🔒 회원가입") 
+    sid = st.text_input("학번", key="signup_sid")
+    name = st.text_input("이름", key="signup_name")
+    pw   = st.text_input("암호", type="password", key="signup_pw")
     if st.button("회원가입"):
         rows = usr_sheet.get_all_records()
         if any(r["학번"] == sid for r in rows):
@@ -45,8 +45,8 @@ def signup_ui():
 
 # ==== 로그인 UI ====
 def login_ui():
-    sid = st.text_input("학번")
-    pw  = st.text_input("암호", type="password")
+    sid = st.text_input("학번", key="login_sid")
+    pw  = st.text_input("암호", type="password", key="login_pw")
     if st.button("로그인"):
         # 1) 입력값 해시
         hash_pw = sha256(pw.encode()).hexdigest()
