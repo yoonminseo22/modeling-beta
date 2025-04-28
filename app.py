@@ -52,12 +52,11 @@ if "credentials" not in st.session_state:
     auth_url, _ = flow.authorization_url(access_type="offline", prompt="consent")
     st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
 
-    # 로그인 링크 보여주기 직후
-    if "code" not in st.query_params:
-        auth_url, _ = flow.authorization_url(access_type="offline", prompt="consent")
-        st.session_state.flow = flow  # 혹시 모르니 다시 저장
-        st.write("▶ 생성된 flow.state:", flow.state)
-        st.markdown(f"[🔐 로그인]({auth_url})")
+    # 로그인 링크 보여주기 & state 찍기
+    auth_url, _ = flow.authorization_url(access_type="offline", prompt="consent")
+    st.write("▶ 생성된 flow.state:", flow.state)
+    st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
+    
 
     # 리디렉션 후 처리 바로 앞
     if "code" in st.query_params:
