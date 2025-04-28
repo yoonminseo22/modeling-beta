@@ -5,8 +5,10 @@ from google.oauth2 import id_token
 from googleapiclient.discovery import build
 from googleapiclient.discovery import build as yt_build
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 import urllib.parse
+import numpy as np
+import matplotlib.pyplot as plt
 
 # ── 시크릿 불러오기 ──
 YOUTUBE_API_KEY = st.secrets["youtube"]["api_key"]
@@ -37,7 +39,7 @@ flow_config = {
     }
 }
 
-# Flow 객체를 세션에서 딱 한 번만 생성
+# ── Flow 객체를 세션에서 딱 한 번만 생성 ──
 if "flow" not in st.session_state:
     st.session_state.flow = Flow.from_client_config(
         flow_config, scopes=SCOPES, redirect_uri=redirect_uri
@@ -46,29 +48,34 @@ flow = st.session_state.flow
 
 # ── 인증 상태 체크 ──
 if "credentials" not in st.session_state:
+    # 1) 로그인 링크 생성
     auth_url, _ = flow.authorization_url(
         access_type="offline",
         prompt="consent"
     )
+    # 2) 생성된 state를 세션에 저장
+    st.session_state["oauth_state"] = flow.state
     st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
 
-    # 사용자가 돌아온 후 query_params 에 code, state 등이 담겨 있습니다.
+    # 3) 리다이렉트 후 code 처리
     if "code" in st.query_params:
-        # 1) 쿼리 파라미터를 평탄화
+        # 쿼리 파라미터 평탄화
         flat = {k: v[0] for k, v in st.query_params.items()}
-        # 2) redirect_uri + ? + urlencode 로 전체 URL 재구성
         auth_response = redirect_uri + "?" + urllib.parse.urlencode(flat)
         try:
-            # 전체 리디렉션 URL을 통째로 넘겨줍니다.
+            # 세션에 저장된 state를 복원
+            flow.state = st.session_state.pop("oauth_state")
+            # 전체 리디렉션 URL로 토큰 교환
             flow.fetch_token(authorization_response=auth_response)
-            # 토큰 저장
             st.session_state["credentials"] = flow.credentials
-            # URL 파라미터 지우고 새로고침
+            # URL 파라미터 제거 및 새로고침
             st.query_params = {}
             st.markdown(
-                """<script>
-                     window.location.href = window.location.origin + window.location.pathname;
-                   </script>""",
+                """
+                <script>
+                  window.location.href = window.location.origin + window.location.pathname;
+                </script>
+                """,
                 unsafe_allow_html=True
             )
             st.stop()
@@ -76,6 +83,7 @@ if "credentials" not in st.session_state:
             st.error(f"❌ 인증 실패: {e}")
 
 else:
+    # ── 이미 인증된 상태 ──
     creds = st.session_state["credentials"]
     request = Request()
     try:
@@ -93,7 +101,7 @@ else:
     st.success(f"👋 안녕하세요, {display_name} 님!")
     st.write("📧 이메일:", idinfo["email"])
 
-    # ── 기존 유튜브 등록 & 회귀분석 로직 그대로 ──
+    # ── 유튜브 영상 등록 ──
     st.subheader("▶ 유튜브 영상 등록")
     video_url = st.text_input("유튜브 URL을 붙여넣으세요")
     if st.button("영상 등록"):
@@ -115,7 +123,7 @@ else:
                 spreadsheetId=SPREADSHEET_ID,
                 range=f"{SHEET_NAME}!B:C"
             ).execute().get("values", [])
-            if any(vid==video_id and ts.startswith(today) for vid,ts in existing):
+            if any(vid == video_id and ts.startswith(today) for vid, ts in existing):
                 st.info("ℹ️ 오늘 이미 등록된 영상입니다.")
                 st.stop()
 
@@ -123,54 +131,47 @@ else:
                 spreadsheetId=SPREADSHEET_ID,
                 range=f"{SHEET_NAME}!A:D",
                 valueInputOption="RAW",
-                body={"values":[[
-                    idinfo["email"], video_id, timestamp, view_count
+                body={"values": [[
+                    idinfo["email"],
+                    video_id,
+                    timestamp,
+                    view_count
                 ]]}
             ).execute()
             st.success(f"✅ 조회수: {view_count:,}회")
             st.success("✅ 스프레드시트에 저장되었습니다!")
 
-
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from datetime import datetime, timedelta
-
-    # ─── 3) 데이터 불러와서 회귀분석 UI ───
+    # ── 회귀분석 및 예측 ──
     st.subheader("📊 회귀분석 및 예측")
-
-    # 1) 분석할 비디오 선택용 콤보박스
     all_rows = service.spreadsheets().values().get(
         spreadsheetId=SPREADSHEET_ID,
         range=f"{SHEET_NAME}!B2:B"
     ).execute().get("values", [])
-    video_ids = sorted({ row[0] for row in all_rows if row })
-
+    video_ids = sorted({row[0] for row in all_rows if row})
     if video_ids:
         sel_video = st.selectbox("분석할 비디오 ID를 선택하세요", video_ids)
-
         if st.button("분석 시작"):
             full = service.spreadsheets().values().get(
                 spreadsheetId=SPREADSHEET_ID,
                 range=f"{SHEET_NAME}!A2:D"
             ).execute().get("values", [])
-            pts = []
-            for email, vid, ts, vc in full:
-                if vid == sel_video:
-                    dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
-                    pts.append((dt, int(vc)))
+            pts = [
+                (datetime.strptime(ts, "%Y-%m-%d %H:%M:%S"), int(vc))
+                for email, vid, ts, vc in full if vid == sel_video
+            ]
             if len(pts) < 3:
                 st.error("데이터가 3개 미만이어서 2차회귀분석을 할 수 없습니다.")
             else:
                 pts.sort(key=lambda x: x[0])
                 t0 = pts[0][0]
-                x = np.array([ (dt - t0).total_seconds()/3600 for dt,_ in pts ])
-                y = np.array([ vc for _,vc in pts ])
+                x = np.array([(dt - t0).total_seconds() / 3600 for dt, _ in pts])
+                y = np.array([vc for _, vc in pts])
 
                 a, b, c = np.polyfit(x, y, 2)
                 st.latex(rf"조회수 = {a:.3f} x^2 + {b:.3f} x + {c:.3f}")
 
                 roots = np.roots([a, b, c - 1_000_000])
-                real_pos = [ r for r in roots if np.isreal(r) and r>0 ]
+                real_pos = [r for r in roots if np.isreal(r) and r > 0]
                 if real_pos:
                     hours = real_pos[0].real
                     predict_dt = t0 + timedelta(hours=hours)
@@ -180,8 +181,8 @@ else:
 
                 fig, ax = plt.subplots()
                 ax.scatter(x, y, label="실제 값")
-                xs = np.linspace(0, x.max()*1.1, 200)
-                ys = a*xs**2 + b*xs + c
+                xs = np.linspace(0, x.max() * 1.1, 200)
+                ys = a * xs**2 + b * xs + c
                 ax.plot(xs, ys, label="2차 회귀곡선")
                 ax.set_xlabel("시간 경과 (시간)")
                 ax.set_ylabel("조회수")
