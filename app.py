@@ -2,6 +2,7 @@
 import streamlit as st
 import gspread
 import requests
+impore hashlib
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -59,7 +60,7 @@ def signup_ui():
         else:
             usr_sheet.append_row([sid, name, pw_hash])
             st.success(f"{name}님, 회원가입이 완료되었습니다!")
-            
+
 # 로그인 UI
 def login_ui():
     st.subheader("로그인")
