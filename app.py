@@ -45,16 +45,28 @@ def signup_ui():
 
 # ==== 로그인 UI ====
 def login_ui():
-    st.header("🔑 로그인")
-    sid = st.text_input("학번", key="login_sid")
-    pw  = st.text_input("암호", type="password", key="login_pw")
+    sid = st.text_input("학번")
+    pw  = st.text_input("암호", type="password")
     if st.button("로그인"):
+        # 1) 입력값 해시
         hash_pw = sha256(pw.encode()).hexdigest()
         st.write("👉 입력 비번 해시:", hash_pw)
-        st.write("👉 시트에 저장된 첫 유저 해시:", rows[0].get("암호(해시)"))
-        # 실제 비교
-        if any(r["학번"]==sid and r["암호(해시)"]==hash_pw for r in rows):
-            st.success("로그인 성공")
+
+        # 2) 시트에서 rows 읽어 오고
+        worksheet = gc.open_by_key(SHEET_KEY).worksheet("회원DB")
+        rows = worksheet.get_all_records()
+        
+        # 3) rows[0] 구조 찍어보기
+        st.write("👉 rows[0] 전체:", rows[0])
+        st.write("👉 rows[0] 키 목록:", list(rows[0].keys()))
+        
+        # 4) 시트에 저장된 해시 확인
+        stored = rows[0].get("암호(해시)", None)
+        st.write("👉 시트에 저장된 해시:", stored)
+
+        # 5) 실제 로그인 매칭
+        if any(r["학번"]==sid and r.get("암호(해시)")==hash_pw for r in rows):
+            st.success("로그인 성공!")
         else:
             st.error("로그인 정보가 일치하지 않습니다.")
 
