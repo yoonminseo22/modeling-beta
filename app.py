@@ -20,8 +20,7 @@ st.subheader("Google 계정으로 로그인하고, 조회수를 분석하세요!
 # ── OAuth2 설정 ──
 client_id     = st.secrets["google_oauth"]["client_id"]
 client_secret = st.secrets["google_oauth"]["client_secret"]
-# ← 끝에 슬래시( / )를 반드시 포함하세요.
-redirect_uri  = "https://modeling-beta-1.streamlit.app/"
+redirect_uri  = "https://modeling-beta-1.streamlit.app/"  # GCP에 등록된 URI와 완전 일치
 SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/spreadsheets",
@@ -37,7 +36,7 @@ flow_config = {
     }
 }
 
-# Flow 객체를 세션에 딱 한 번만 생성
+# ── Flow 객체는 세션에 딱 한 번만 생성 ──
 if "flow" not in st.session_state:
     st.session_state.flow = Flow.from_client_config(
         flow_config, scopes=SCOPES, redirect_uri=redirect_uri
@@ -46,27 +45,31 @@ flow = st.session_state.flow
 
 # ── 인증 상태 체크 ──
 if "credentials" not in st.session_state:
-    # 1) 승인 URL 생성
     auth_url, _ = flow.authorization_url(
         access_type="offline",
         prompt="consent"
     )
     st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
 
-    # 2) 리디렉트 후 코드 처리
     params = st.query_params
     if "code" in params and "state" in params:
         code  = params["code"][0]
         state = params["state"][0]
+
+        # **디버그 로그**: 실제 흐름의 state와 리턴된 state를 비교해 봅니다.
+        st.write("▶ flow.state (원래):", flow.state)
+        st.write("▶ returned state :", state)
+
         try:
-            # state 와 code 를 모두 포함한 URL 로 fetch
-            auth_response = f"{redirect_uri}?state={state}&code={code}"
-            flow.fetch_token(authorization_response=auth_response)
-            # 세션에 자격 저장
+            # 리턴된 state를 flow.state에 덮어써서 불일치 해결
+            flow.state = state
+            # 이제 code만으로 토큰 교환
+            flow.fetch_token(code=code)
+
+            # 자격 증명 저장
             st.session_state["credentials"] = flow.credentials
-            # URL에서 ?state & code 제거
+            # 쿼리 파라미터 깨끗이 지우고 새로고침
             st.query_params = {}
-            # JS 리다이렉트로 페이지 새로고침
             st.markdown(
                 """
                 <script>
@@ -80,34 +83,32 @@ if "credentials" not in st.session_state:
             st.error(f"❌ 인증 실패: {e}")
 
 else:
-    # ── 인증된 상태 ──
     creds   = st.session_state["credentials"]
     request = Request()
-    idinfo  = id_token.verify_oauth2_token(
-        creds.id_token, request, client_id
-    )
+    try:
+        idinfo  = id_token.verify_oauth2_token(
+            creds.id_token, request, client_id
+        )
+    except Exception as e:
+        st.error(f"토큰 검증 실패: {e}")
+        st.stop()
 
-    # YouTube 및 Sheets 클라이언트 생성
     service = build("sheets", "v4", credentials=creds)
     yt      = yt_build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
 
-    # 사용자 인사
-    display_name = idinfo.get("name") or idinfo.get("email", "").split("@")[0]
+    display_name = idinfo.get("name") or idinfo["email"].split("@")[0]
     st.success(f"👋 안녕하세요, {display_name} 님!")
     st.write("📧 이메일:", idinfo["email"])
 
-    # ── 유튜브 영상 등록 UI ──
+    # ── 여기부터는 기존 UI/로직 ──
     st.subheader("▶ 유튜브 영상 등록")
     video_url = st.text_input("유튜브 URL을 붙여넣으세요")
-
     if st.button("영상 등록"):
-        # 1) video_id 추출
         match = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", video_url)
         if not match:
             st.error("❌ 올바른 YouTube URL이 아닙니다.")
         else:
             video_id = match.group(1)
-            # 2) 조회수 API 호출
             try:
                 resp = yt.videos().list(part="statistics", id=video_id).execute()
                 view_count = int(resp["items"][0]["statistics"].get("viewCount", 0))
@@ -115,39 +116,28 @@ else:
                 st.error(f"❌ YouTube API 호출 실패: {e}")
                 st.stop()
 
-            # 3) 타임스탬프 생성
             timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
             today     = timestamp.split(" ")[0]
 
-            # ── 중복 체크 ──
             existing = service.spreadsheets().values().get(
                 spreadsheetId=SPREADSHEET_ID,
                 range=f"{SHEET_NAME}!B:C"
             ).execute().get("values", [])
-            already = any(
-                vid == video_id and ts.startswith(today)
-                for vid, ts in existing
-            )
-            if already:
-                st.info("ℹ️ 오늘 이 영상은 이미 등록되었습니다.")
+            if any(vid==video_id and ts.startswith(today) for vid,ts in existing):
+                st.info("ℹ️ 오늘 이미 등록된 영상입니다.")
                 st.stop()
 
-            # 4) 시트에 기록
             service.spreadsheets().values().append(
                 spreadsheetId=SPREADSHEET_ID,
                 range=f"{SHEET_NAME}!A:D",
                 valueInputOption="RAW",
-                body={"values": [[
-                    idinfo["email"],
-                    video_id,
-                    timestamp,
-                    view_count
+                body={"values":[[
+                    idinfo["email"], video_id, timestamp, view_count
                 ]]}
             ).execute()
-
-            # 결과 표시
-            st.success(f"✅ 현재 조회수: {view_count:,}회")
+            st.success(f"✅ 조회수: {view_count:,}회")
             st.success("✅ 스프레드시트에 저장되었습니다!")
+
 
     import numpy as np
     import matplotlib.pyplot as plt
