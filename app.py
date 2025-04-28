@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from hashlib import sha256
 from datetime import datetime
+from oauth2client.service_account import ServiceAccountCredentials
 
 st.set_page_config("📈 유튜브 조회수 분석기", layout="centered")
 
@@ -14,7 +15,10 @@ st.title("📈 유튜브 조회수 분석기")
 st.subheader("학생용 로그인/회원가입")
 
 # --- 1) 구글 서비스 계정으로 스프레드시트 인증 ---
-gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
+scope = ["https://spreadsheets.google.com/feeds","https://www.googleapis.com/auth/drive"]
+creds_dict = st.secrets["gcp_service_account"]
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+gc = gspread.authorize(creds)
 
 # --- 2) 시크릿에서 시트 정보 불러오기 ---
 yt_conf  = st.secrets["sheets"]["youtube"]  # 조회 기록용 시트
@@ -29,18 +33,17 @@ usr_wb    = gc.open_by_key(usr_conf["spreadsheet_id"])
 usr_sheet = usr_wb.worksheet(usr_conf["sheet_name"])
 
 # 해시 함수
-def hash_password(pw: str) -> str:
+def hash_password(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
 
 
 # ==== 회원가입 UI ====
 def signup_ui():
-    st.header("회원가입")
+    st.subheader("회원가입")
     sid = st.text_input("학번", key="signup_sid")
     name = st.text_input("이름", key="signup_name")
     pwd = st.text_input("비밀번호", type="password", key="signup_pwd")
     if st.button("회원가입"):
-        # 입력 확인
         if not sid or not name or not pwd:
             st.error("학번, 이름, 비밀번호를 모두 입력해주세요.")
             return
@@ -49,30 +52,29 @@ def signup_ui():
             st.error("이미 등록된 학번입니다.")
         else:
             pw_hash = hash_password(pwd)
-            # 시트에 [학번, 이름, 해시된 비밀번호] 순으로 추가
             usr_sheet.append_row([sid, name, pw_hash])
             st.success(f"{name}님, 회원가입이 완료되었습니다!")
 
 # 로그인 UI
 def login_ui():
-    st.header("로그인")
+    st.subheader("로그인")
     sid = st.text_input("학번", key="login_sid")
     pwd = st.text_input("비밀번호", type="password", key="login_pwd")
     if st.button("로그인"):
-        # 입력 확인
         if not sid or not pwd:
             st.error("학번과 비밀번호를 모두 입력해주세요.")
             return
         rows = usr_sheet.get_all_records()
-        target = next((r for r in rows if r["학번"] == sid), None)
-        if not target:
-            st.error("등록되지 않은 학번입니다.")
-        else:
-            if hash_password(pwd) == target["암호(해시)"]:
-                st.success(f"환영합니다, {sid}님!")
-                st.session_state["logged_in"] = sid
-            else:
-                st.error("비밀번호가 일치하지 않습니다.")
+        for r in rows:
+            if r["학번"] == sid:
+                if r["암호(해시)"] == hash_password(pwd):
+                    st.success(f"환영합니다, {r['이름']}님!")
+                    return True
+                else:
+                    st.error("비밀번호가 일치하지 않습니다.")
+                    return False
+        st.error("등록되지 않은 학번입니다.")
+        return False
 
                 
 # 로그인 완료 후 간단 메시지
