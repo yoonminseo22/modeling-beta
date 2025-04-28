@@ -17,13 +17,14 @@ SHEET_NAME      = st.secrets["sheets"]["sheet_name"]
 
 # ── 페이지 설정 ──
 st.set_page_config(page_title="📈 유튜브 조회수 분석기", layout="centered")
+
 st.title("📈 유튜브 조회수 분석기")
 st.subheader("Google 계정으로 로그인하고, 조회수를 분석하세요!")
 
 # ── OAuth2 설정 ──
 client_id     = st.secrets["google_oauth"]["client_id"]
 client_secret = st.secrets["google_oauth"]["client_secret"]
-redirect_uri  = "https://modeling-beta-1.streamlit.app/"  # GCP에 정확히 등록된 URI 끝에 슬래시 포함
+redirect_uri  = "https://modeling-beta-1.streamlit.app/"  # GCP에 정확히 등록된 URI
 SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/spreadsheets",
@@ -39,7 +40,7 @@ flow_config = {
     }
 }
 
-# Flow 객체를 세션에 딱 한 번만 생성
+# Flow 객체를 세션에서 딱 한 번만 생성
 if "flow" not in st.session_state:
     st.session_state.flow = Flow.from_client_config(
         flow_config, scopes=SCOPES, redirect_uri=redirect_uri
@@ -48,41 +49,42 @@ flow = st.session_state.flow
 
 # ── 인증 상태 체크 ──
 if "credentials" not in st.session_state:
-    # 1) 승인 URL 생성
-    auth_url, _ = flow.authorization_url(access_type="offline", prompt="consent")
+    # 1) 승인 URL 생성 (단 한 번만!)
+    auth_url, auth_state = flow.authorization_url(
+        access_type="offline",
+        prompt="consent"
+    )
+    # 생성된 state 값을 세션에 저장
+    st.session_state["oauth_state"] = auth_state
+    st.write("▶ 생성된 state:", auth_state)
     st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
 
-    # 로그인 링크 보여주기 & state 찍기
-    auth_url, _ = flow.authorization_url(access_type="offline", prompt="consent")
-    st.write("▶ 생성된 flow.state:", flow.state)
-    st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
-    
-
-    # 리디렉션 후 처리 바로 앞
+    # 리디렉션으로 돌아온 뒤
     if "code" in st.query_params:
-        st.write("▶ 리디렉트로 받은 쿼리파라미터:", st.query_params)
+        # 쿼리파라미터에서 state, code 가져오기
         returned_state = st.query_params.get("state", [""])[0]
         st.write("▶ 리턴된 state:", returned_state)
-        # 그리고 나서 flow.state 와 비교합니다.
-        st.write("▶ 비교 flow.state:", flow.state)
+        st.write("▶ 세션의 oauth_state:", st.session_state["oauth_state"])
 
-    # 2) 리디렉트 후 코드 처리
-    if "code" in st.query_params:
-        # 쿼리 파라미터 평탄화
+        # CSRF state 검증
+        if returned_state != st.session_state["oauth_state"]:
+            st.error("❌ CSRF state 불일치! 인증을 다시 시도하세요.")
+            st.stop()
+
+        # 파라미터 평탄화 및 토큰 요청
         flat = {k: v[0] for k, v in st.query_params.items()}
-        # 전체 리디렉션 URL 재구성
         auth_response = redirect_uri + "?" + urllib.parse.urlencode(flat)
         try:
             flow.fetch_token(authorization_response=auth_response)
-            # 세션에 자격 저장
             st.session_state["credentials"] = flow.credentials
-            # URL 파라미터 제거 & 페이지 리로드
+            # 파라미터 제거 후 새로고침
             st.query_params = {}
             st.experimental_rerun()
         except Exception as e:
             st.error(f"❌ 인증 실패: {e}")
+
 else:
-    # ── 인증된 상태 ──
+    # ── 이미 인증된 상태 ──
     creds = st.session_state["credentials"]
     request = Request()
     try:
@@ -103,7 +105,6 @@ else:
     # ── 유튜브 영상 등록 ──
     st.subheader("▶ 유튜브 영상 등록")
     video_url = st.text_input("유튜브 URL을 붙여넣으세요")
-
     if st.button("영상 등록"):
         match = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", video_url)
         if not match:
@@ -123,7 +124,7 @@ else:
                 spreadsheetId=SPREADSHEET_ID,
                 range=f"{SHEET_NAME}!B:C"
             ).execute().get("values", [])
-            if any(vid==video_id and ts.startswith(today) for vid, ts in existing):
+            if any(vid==video_id and ts.startswith(today) for vid,ts in existing):
                 st.info("ℹ️ 오늘 이미 등록된 영상입니다.")
                 st.stop()
 
@@ -131,7 +132,7 @@ else:
                 spreadsheetId=SPREADSHEET_ID,
                 range=f"{SHEET_NAME}!A:D",
                 valueInputOption="RAW",
-                body={"values": [[
+                body={"values":[[
                     idinfo["email"], video_id, timestamp, view_count
                 ]]}
             ).execute()
@@ -144,7 +145,7 @@ else:
         spreadsheetId=SPREADSHEET_ID,
         range=f"{SHEET_NAME}!B2:B"
     ).execute().get("values", [])
-    video_ids = sorted({row[0] for row in all_rows if row})
+    video_ids = sorted({ row[0] for row in all_rows if row })
     if video_ids:
         sel_video = st.selectbox("분석할 비디오 ID를 선택하세요", video_ids)
         if st.button("분석 시작"):
@@ -162,17 +163,17 @@ else:
             else:
                 pts.sort(key=lambda x: x[0])
                 t0 = pts[0][0]
-                x = np.array([(dt - t0).total_seconds()/3600 for dt,_ in pts])
-                y = np.array([vc for _,vc in pts])
+                x = np.array([ (dt - t0).total_seconds()/3600 for dt,_ in pts ])
+                y = np.array([ vc for _,vc in pts ])
                 a, b, c = np.polyfit(x, y, 2)
                 st.latex(rf"조회수 = {a:.3f} x^2 + {b:.3f} x + {c:.3f}")
                 roots = np.roots([a, b, c - 1_000_000])
-                real_pos = [r for r in roots if np.isreal(r) and r>0]
+                real_pos = [ r for r in roots if np.isreal(r) and r>0 ]
                 if real_pos:
                     predict_dt = t0 + timedelta(hours=real_pos[0].real)
                     st.write(f"🎯 100만회 예상 시점: **{predict_dt}**")
                 else:
-                    st.write("⚠️ 1,000,000회 달성 예측값이 없습니다.")
+                    st.write("⚠️ 1,000,000회 달성 예측이 불가능합니다.")
                 fig, ax = plt.subplots()
                 ax.scatter(x, y, label="실제 값")
                 xs = np.linspace(0, x.max()*1.1, 200)
