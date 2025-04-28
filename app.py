@@ -17,7 +17,6 @@ SHEET_NAME      = st.secrets["sheets"]["sheet_name"]
 
 # ── 페이지 설정 ──
 st.set_page_config(page_title="📈 유튜브 조회수 분석기", layout="centered")
-
 st.title("📈 유튜브 조회수 분석기")
 st.subheader("Google 계정으로 로그인하고, 조회수를 분석하세요!")
 
@@ -40,7 +39,7 @@ flow_config = {
     }
 }
 
-# Flow 객체를 세션에서 딱 한 번만 생성
+# ── Flow 객체는 세션에 한 번만 생성 ──
 if "flow" not in st.session_state:
     st.session_state.flow = Flow.from_client_config(
         flow_config, scopes=SCOPES, redirect_uri=redirect_uri
@@ -49,24 +48,25 @@ flow = st.session_state.flow
 
 # ── 인증 상태 체크 ──
 if "credentials" not in st.session_state:
-    # 1) 승인 URL 생성 (단 한 번만!)
+    # 1) 승인 URL 생성 & state 저장 (한 번만!)
     auth_url, auth_state = flow.authorization_url(
         access_type="offline",
         prompt="consent"
     )
-    # 생성된 state 값을 세션에 저장
     st.session_state["oauth_state"] = auth_state
+
+    # 디버그용: 생성된 state 확인
     st.write("▶ 생성된 state:", auth_state)
     st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
 
-    # 리디렉션으로 돌아온 뒤
+    # 2) 리디렉션으로 돌아온 후 코드 처리
     if "code" in st.query_params:
-        # 쿼리파라미터에서 state, code 가져오기
+        # 구글이 돌려준 state
         returned_state = st.query_params.get("state", [""])[0]
         st.write("▶ 리턴된 state:", returned_state)
         st.write("▶ 세션의 oauth_state:", st.session_state["oauth_state"])
 
-        # CSRF state 검증
+        # CSRF 보호: 두 값이 일치해야만 다음으로 진행
         if returned_state != st.session_state["oauth_state"]:
             st.error("❌ CSRF state 불일치! 인증을 다시 시도하세요.")
             st.stop()
@@ -77,7 +77,7 @@ if "credentials" not in st.session_state:
         try:
             flow.fetch_token(authorization_response=auth_response)
             st.session_state["credentials"] = flow.credentials
-            # 파라미터 제거 후 새로고침
+            # URL 파라미터 제거 후 새로고침
             st.query_params = {}
             st.experimental_rerun()
         except Exception as e:
@@ -93,7 +93,7 @@ else:
         st.error(f"❌ 토큰 검증 실패: {e}")
         st.stop()
 
-    # ── API 클라이언트 생성 ──
+    # ── Sheets & YouTube API 클라이언트 생성 ──
     service = build("sheets", "v4", credentials=creds)
     yt      = yt_build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
 
