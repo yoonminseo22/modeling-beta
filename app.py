@@ -20,7 +20,7 @@ st.subheader("Google 계정으로 로그인하고, 조회수를 분석하세요!
 # ── OAuth2 설정 ──
 client_id     = st.secrets["google_oauth"]["client_id"]
 client_secret = st.secrets["google_oauth"]["client_secret"]
-redirect_uri  = "https://modeling-beta-1.streamlit.app/"  # GCP에 등록된 URI와 완전 일치
+redirect_uri  = "https://modeling-beta-1.streamlit.app/"  # GCP에 정확히 동일하게 등록
 SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/spreadsheets",
@@ -36,7 +36,7 @@ flow_config = {
     }
 }
 
-# ── Flow 객체는 세션에 딱 한 번만 생성 ──
+# Flow 객체를 세션에 한 번만 생성
 if "flow" not in st.session_state:
     st.session_state.flow = Flow.from_client_config(
         flow_config, scopes=SCOPES, redirect_uri=redirect_uri
@@ -55,20 +55,14 @@ if "credentials" not in st.session_state:
     if "code" in params and "state" in params:
         code  = params["code"][0]
         state = params["state"][0]
-
-        # **디버그 로그**: 실제 흐름의 state와 리턴된 state를 비교해 봅니다.
-        st.write("▶ flow.state (원래):", flow.state)
-        st.write("▶ returned state :", state)
-
         try:
-            # 리턴된 state를 flow.state에 덮어써서 불일치 해결
+            # Flow 내부 state를 리턴된 state로 덮어써서 CSRF 체크 우회
             flow.state = state
-            # 이제 code만으로 토큰 교환
             flow.fetch_token(code=code)
 
-            # 자격 증명 저장
+            # 자격증명 저장
             st.session_state["credentials"] = flow.credentials
-            # 쿼리 파라미터 깨끗이 지우고 새로고침
+            # URL 파라미터 지우고 새로고침
             st.query_params = {}
             st.markdown(
                 """
@@ -90,7 +84,7 @@ else:
             creds.id_token, request, client_id
         )
     except Exception as e:
-        st.error(f"토큰 검증 실패: {e}")
+        st.error(f"❌ 토큰 검증 실패: {e}")
         st.stop()
 
     service = build("sheets", "v4", credentials=creds)
@@ -100,7 +94,7 @@ else:
     st.success(f"👋 안녕하세요, {display_name} 님!")
     st.write("📧 이메일:", idinfo["email"])
 
-    # ── 여기부터는 기존 UI/로직 ──
+    # ── 유튜브 영상 등록 UI ──
     st.subheader("▶ 유튜브 영상 등록")
     video_url = st.text_input("유튜브 URL을 붙여넣으세요")
     if st.button("영상 등록"):
