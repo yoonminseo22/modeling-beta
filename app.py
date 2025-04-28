@@ -144,3 +144,79 @@ else:
             # 결과 표시
             st.success(f"✅ 현재 조회수: {view_count:,}회")
             st.success("✅ 스프레드시트에 저장되었습니다!")
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from datetime import datetime, timedelta
+
+    # ─── 3) 데이터 불러와서 회귀분석 UI ───
+    st.subheader("📊 회귀분석 및 예측")
+
+    # 1) 분석할 비디오 선택용 콤보박스
+    #    이미 시트에 등록된 video_id 리스트를 가져와서 중복 제거
+    all_rows = service.spreadsheets().values().get(
+        spreadsheetId=SPREADSHEET_ID,
+        range=f"{SHEET_NAME}!B2:B"
+    ).execute().get("values", [])
+    video_ids = sorted({ row[0] for row in all_rows if row })
+
+    if video_ids:
+        sel_video = st.selectbox("분석할 비디오 ID를 선택하세요", video_ids)
+
+        if st.button("분석 시작"):
+            # 2) 해당 비디오의 (timestamp, view_count) 기록을 가져오기
+            data = service.spreadsheets().values().get(
+                spreadsheetId=SPREADSHEET_ID,
+                range=f"{SHEET_NAME}!C2:D"
+            ).execute().get("values", [])
+            # C열: timestamp, D열: view_count
+            # 필터: video_id가 sel_video인 행만 추출
+            # (가정: A=이메일, B=video_id, C=timestamp, D=view_count)
+            full = service.spreadsheets().values().get(
+                spreadsheetId=SPREADSHEET_ID,
+                range=f"{SHEET_NAME}!A2:D"
+            ).execute().get("values", [])
+            pts = []
+            for email, vid, ts, vc in full:
+                if vid == sel_video:
+                    # ts 예: "2025-04-28 13:00:00"
+                    dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+                    pts.append((dt, int(vc)))
+            if len(pts) < 3:
+                st.error("데이터가 3개 미만이어서 2차회귀분석을 할 수 없습니다.")
+            else:
+                # 3) 시간 간격(시간 단위) 계산
+                pts.sort(key=lambda x: x[0])
+                t0 = pts[0][0]
+                x = np.array([ (dt - t0).total_seconds()/3600 for dt,_ in pts ])
+                y = np.array([ vc for _,vc in pts ])
+
+                # 4) 2차회귀(이차함수) 계수 구하기
+                a, b, c = np.polyfit(x, y, 2)
+                st.latex(rf"조회수 = {a:.3f} x^2 + {b:.3f} x + {c:.3f}")
+
+                # 5) 100만 조회 시점 예측
+                #    a x^2 + b x + (c - 1e6) = 0 을 풀기
+                roots = np.roots([a, b, c - 1_000_000])
+                # 양수 실근만
+                real_pos = [ r for r in roots if np.isreal(r) and r>0 ]
+                if real_pos:
+                    hours = real_pos[0].real
+                    predict_dt = t0 + timedelta(hours=hours)
+                    st.write(f"🎯 조회수 1,000,000회 예상 시점: **{predict_dt}**")
+                else:
+                    st.write("⚠️ 1,000,000회 달성 예측값이 없습니다.")
+
+                # 6) 그래프 그리기
+                fig, ax = plt.subplots()
+                # 원 데이터
+                ax.scatter(x, y, label="실제 값")
+                # 회귀 곡선
+                xs = np.linspace(0, x.max()*1.1, 200)
+                ys = a*xs**2 + b*xs + c
+                ax.plot(xs, ys, label="2차 회귀곡선")
+                ax.set_xlabel("시간 경과 (시간)")
+                ax.set_ylabel("조회수")
+                ax.legend()
+                st.pyplot(fig)
+    else:
+        st.info("아직 등록된 영상이 없습니다.")
