@@ -21,7 +21,7 @@ st.subheader("Google 계정으로 로그인하고, 조회수를 분석하세요!
 # ── OAuth2 설정 ──
 client_id     = st.secrets["google_oauth"]["client_id"]
 client_secret = st.secrets["google_oauth"]["client_secret"]
-redirect_uri  = "https://modeling-beta-1.streamlit.app/"  # GCP에 등록된 URI와 정확히 일치
+redirect_uri  = "https://modeling-beta-1.streamlit.app/"  # GCP에 정확히 등록된 URI
 SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/spreadsheets",
@@ -37,7 +37,7 @@ flow_config = {
     }
 }
 
-# ── Flow 객체를 세션에서 단 1회 생성 ──
+# Flow 객체를 세션에서 딱 한 번만 생성
 if "flow" not in st.session_state:
     st.session_state.flow = Flow.from_client_config(
         flow_config, scopes=SCOPES, redirect_uri=redirect_uri
@@ -52,11 +52,10 @@ if "credentials" not in st.session_state:
     )
     st.markdown(f"[🔐 Google 계정으로 로그인하기]({auth_url})")
 
-    # 사용자가 돌아오면 쿼리 파라미터에 code, state 등이 담겨 있습니다.
-    params = st.experimental_get_query_params()
-    if "code" in params:
+    # 사용자가 돌아온 후 query_params 에 code, state 등이 담겨 있습니다.
+    if "code" in st.query_params:
         # 1) 쿼리 파라미터를 평탄화
-        flat = {k: v[0] for k, v in params.items()}
+        flat = {k: v[0] for k, v in st.query_params.items()}
         # 2) redirect_uri + ? + urlencode 로 전체 URL 재구성
         auth_response = redirect_uri + "?" + urllib.parse.urlencode(flat)
         try:
@@ -64,8 +63,8 @@ if "credentials" not in st.session_state:
             flow.fetch_token(authorization_response=auth_response)
             # 토큰 저장
             st.session_state["credentials"] = flow.credentials
-            # URL 깨끗이 지우고 새로고침
-            st.experimental_set_query_params()
+            # URL 파라미터 지우고 새로고침
+            st.query_params = {}
             st.markdown(
                 """<script>
                      window.location.href = window.location.origin + window.location.pathname;
@@ -94,7 +93,7 @@ else:
     st.success(f"👋 안녕하세요, {display_name} 님!")
     st.write("📧 이메일:", idinfo["email"])
 
-    # ── 유튜브 영상 등록 UI ──
+    # ── 기존 유튜브 등록 & 회귀분석 로직 그대로 ──
     st.subheader("▶ 유튜브 영상 등록")
     video_url = st.text_input("유튜브 URL을 붙여넣으세요")
     if st.button("영상 등록"):
@@ -112,7 +111,6 @@ else:
 
             timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
             today     = timestamp.split(" ")[0]
-
             existing = service.spreadsheets().values().get(
                 spreadsheetId=SPREADSHEET_ID,
                 range=f"{SHEET_NAME}!B:C"
