@@ -219,19 +219,36 @@ def main_ui():
     formula = f"y = {a:.3e} x² + {b:.3e} x + {c:.3e}"
     st.markdown(f"**2차 회귀식:**  `{formula}`")
 
-    # 4) 목표조회수(예: 1_000_000) 일 때 방정식의 해 구하기
+    # 2) 목표 조회수(예: 1,000,000) 돌파 시점 예측
     target = 1_000_000
     roots = np.roots([coef[0], coef[1], coef[2] - target])
-
-    # 5) 실수해만 골라내고 처리
     real_roots = [r.real for r in roots if abs(r.imag) < 1e-6]
+
     if real_roots:
-        t_offset = max(real_roots)
-        t_future = df["timestamp"].min() + pd.to_timedelta(t_offset, unit="s")
-        st.write(f"▶️ 조회수 {target:,}회 돌파 예상 시점: **{t_future}**")
+        # 실근이 있을 때만 계산
+        t_future = max(real_roots)
+        dt_future = df["timestamp"].min() + pd.to_timedelta(t_future, unit="s")
+        st.write(f"▶️ 조회수 {target:,}회 돌파 예상 시점: **{dt_future}**")
+
+        # 3) 예측 구간 생성
+        ts = pd.date_range(df["timestamp"].min(), dt_future, periods=200)
+        xs = (ts - df["timestamp"].min()).total_seconds()
+        ys = coef[0]*xs**2 + coef[1]*xs + coef[2]
+
+        # 4) 시각화
+        fig, ax = plt.subplots(figsize=(8,4))
+        ax.scatter(df["timestamp"], y, label="실제 조회수")
+        ax.plot(ts, ys, color="orange", label="2차 회귀곡선")
+        ax.set_xlabel("시간")
+        ax.set_ylabel("조회수")
+        ax.legend()
+        plt.xticks(rotation=45)
+        st.pyplot(fig)
+
     else:
+        # 실근이 없으면 경고만 띄우고 그래프는 생략
         st.warning("❗목표 조회수 돌파 시점을 회귀모델로 예측할 수 없습니다.")
-        
+
         # 시각화
     fig, ax = plt.subplots(figsize=(8,4))
     ax.scatter(df["timestamp"], y, label="실제 조회수")
