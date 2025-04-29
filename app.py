@@ -190,7 +190,7 @@ def main_ui():
     # ---- 데이터 불러오기 & 분석 ----
     st.header("2️⃣ 유튜브 조회수 분석하기")
     all_records = yt_sheet.get_all_records()
-    records = [r for r in all_records if str(r("학번")) == sid]
+    records = [r for r in all_records if str(r["학번"]) == sid]
     if not records:
         st.info("내 기록이 아직 없습니다. 먼저 '1️⃣ 조회수 기록하기'로 기록하세요.")
         return
