@@ -6,8 +6,23 @@ import hashlib
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
+import os
 from datetime import datetime
 from oauth2client.service_account import ServiceAccountCredentials
+
+# 1) 시스템에 한글 폰트 추가 (예: 나눔고딕)
+#    ※ 실제 경로는 서버에 설치된 폰트 경로에 맞춰 주세요.
+font_path = '/usr/share/fonts/truetype/nanum/NanumGothic.ttf'
+if os.path.exists(font_path):
+    fm.fontManager.addfont(font_path)
+    plt.rc('font', family='NanumGothic')
+else:
+    # 폰트가 없으면 대체 폰트 검색
+    plt.rc('font', family=fm.findfont(fm.FontProperties(family='sans-serif')))
+
+# 마이너스 기호 깨짐 방지
+plt.rc('axes', unicode_minus=False)
 
 st.set_page_config("📈 유튜브 조회수 분석기", layout="centered")
 
@@ -186,10 +201,16 @@ def main_ui():
         ts = pd.date_range(df["timestamp"].min(), dt_future, periods=200)
         xs = (ts - df["timestamp"].min()).total_seconds()
         ax.plot(ts, poly(xs), color="orange", label="2차 회귀곡선")
+        
+        # x축 포맷 & 레이블 회전
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H:%M'))
+        fig.autofmt_xdate(rotation=45)
+
         ax.set_xlabel("시간")
         ax.set_ylabel("조회수")
         ax.legend()
-        plt.xticks(rotation=45)
+
+        plt.tight_layout()
         st.pyplot(fig)
 
     # ---- 광고비 모델 추가 (옵션) ----
