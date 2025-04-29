@@ -189,6 +189,13 @@ def main_ui():
         st.info("아직 기록된 데이터가 없습니다.")
     else:
         df = pd.DataFrame(records)
+
+        # → **★ 로그인한 user['학번'] 만 필터**  
+        df = df[df["학번"] == str(user["학번"])]
+        if df.empty:
+            st.info("내 기록이 아직 없습니다. 먼저 '1️⃣ 조회수 기록하기'로 기록하세요.")
+            return
+        
         # 날짜형 변환
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         df["viewCount"] = df["viewCount"].astype(int)
