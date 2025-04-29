@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from datetime import datetime
+import os
 from oauth2client.service_account import ServiceAccountCredentials
 
 # 1) 시스템에 한글 폰트 추가 (예: 나눔고딕)
