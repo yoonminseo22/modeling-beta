@@ -19,7 +19,7 @@ if os.path.exists(font_path):
     plt.rc('font', family='NanumGothic')
 else:
     # 폰트가 없으면 대체 폰트 검색
-    plt.rc('font', family=fm.findfont(fm.FontProperties(family='DejaVu Sans')))
+    plt.rc('font', family=fm.findfont(fm.FontProperties(family='NanumGothicLight')))
 
 # 마이너스 기호 깨짐 방지
 plt.rc('axes', unicode_minus=False)
