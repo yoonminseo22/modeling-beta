@@ -164,6 +164,7 @@ def main_ui():
         st.experimental_rerun()
 
     user = st.session_state["user"]
+    sid = str(user["학번"])  # ← 여기서 sid 정의
     st.sidebar.success(f"👋 {user['이름']}님, 반갑습니다!")
     st.write("로그인에 성공했습니다! 이곳에서 유튜브 분석 기능을 사용하세요.")
 
