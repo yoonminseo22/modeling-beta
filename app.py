@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+import matplotlib.font_manager as fm
 from datetime import datetime
 import os
 from oauth2client.service_account import ServiceAccountCredentials
