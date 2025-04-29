@@ -13,14 +13,10 @@ import os
 from oauth2client.service_account import ServiceAccountCredentials
 
 # 1) 시스템에 한글 폰트 추가 (예: 나눔고딕)
-#    ※ 실제 경로는 서버에 설치된 폰트 경로에 맞춰 주세요.
-font_path = r"C:\Users\user2\OneDrive - 연서중학교\바탕 화면\modeling-beta\nanum-gothic\NanumGothic.ttf"
-if os.path.exists(font_path):
-    fm.fontManager.addfont(font_path)
-    plt.rc('font', family='NanumGothic')
-else:
-    # 폰트가 없으면 대체 폰트 검색
-    plt.rc('font', family=fm.findfont(fm.FontProperties(family='NanumGothicLight')))
+nanum_path = "/mnt/data/NanumGothic.ttf"
+nanum_prop = fm.FontProperties(fname=nanum_path)
+
+plt.rc('font', family=nanum_prop.get_name())
 
 # 마이너스 기호 깨짐 방지
 plt.rc('axes', unicode_minus=False)
@@ -127,12 +123,22 @@ def extract_video_id(url):
 
 # 조회수 API 호출
 def get_video_statistics(video_id):
+    import requests
     url = (
         f"https://www.googleapis.com/youtube/v3/videos"
         f"?part=statistics&id={video_id}&key={YOUTUBE_API_KEY}"
     )
-    r = requests.get(url).json()
-    items = r.get("items")
+    r = requests.get(url)
+    st.write("🔗 요청 URL:", url)
+    st.write("📣 HTTP Status:", r.status_code)
+    try:
+        data = r.json()
+        st.write("📝 응답 JSON:", data)
+    except Exception as e:
+        st.write("⚠️ JSON 파싱 오류:", e)
+        return None
+
+    items = data.get("items")
     if items:
         stats = items[0]["statistics"]
         return {
