@@ -12,11 +12,16 @@ from datetime import datetime
 import os
 from oauth2client.service_account import ServiceAccountCredentials
 
-# 1) 시스템에 한글 폰트 추가 (예: 나눔고딕)
-nanum_path = "/mnt/data/NanumGothic.ttf"
-nanum_prop = fm.FontProperties(fname=nanum_path)
+# 저장소에 넣어둔 TTF 파일 경로
+font_path = "fonts/NanumGothic.ttf"
 
-plt.rc('font', family=nanum_prop.get_name())
+# Matplotlib에 폰트 등록
+fm.fontManager.addfont(font_path)
+prop = fm.FontProperties(fname=font_path)
+font_name = prop.get_name()
+
+# 전역 기본 폰트로 설정
+plt.rcParams["font.family"] = font_name
 
 # 마이너스 기호 깨짐 방지
 plt.rc('axes', unicode_minus=False)
