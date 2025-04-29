@@ -13,13 +13,13 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # 1) 시스템에 한글 폰트 추가 (예: 나눔고딕)
 #    ※ 실제 경로는 서버에 설치된 폰트 경로에 맞춰 주세요.
-font_path = '/usr/share/fonts/truetype/nanum/NanumGothic.ttf'
+font_path = r"C:\Users\user2\OneDrive - 연서중학교\바탕 화면\modeling-beta\nanum-gothic\NanumGothic.ttf"
 if os.path.exists(font_path):
     fm.fontManager.addfont(font_path)
     plt.rc('font', family='NanumGothic')
 else:
     # 폰트가 없으면 대체 폰트 검색
-    plt.rc('font', family=fm.findfont(fm.FontProperties(family='sans-serif')))
+    plt.rc('font', family=fm.findfont(fm.FontProperties(family='DejaVu Sans')))
 
 # 마이너스 기호 깨짐 방지
 plt.rc('axes', unicode_minus=False)
