@@ -208,6 +208,11 @@ def main_ui():
         coef = np.polyfit(x, y, 2)
         poly = np.poly1d(coef)
 
+        # 식 문자열 만들기
+        a, b, c = coef
+        formula = f"y = {a:.3e} x² + {b:.3e} x + {c:.3e}"
+        st.markdown(f"**2차 회귀식:**  `{formula}`")
+
         # 100만 돌파 예상 시점
         # coef[0]*t^2 + coef[1]*t + coef[2] = 1e6  를 풀기
         roots = np.roots([coef[0], coef[1], coef[2] - 1e6])
@@ -234,6 +239,23 @@ def main_ui():
 
         plt.tight_layout()
         st.pyplot(fig)
+
+        # 잔차 계산
+        y_pred = poly(x)
+        residuals = y - y_pred
+
+        # 잔차 통계
+        rmse = np.sqrt(np.mean(residuals**2))
+        st.markdown(f"**잔차(RMSE):** {rmse:,.0f} 회")
+
+        # 잔차 플롯
+        fig2, ax2 = plt.subplots(figsize=(8,3))
+        ax2.hlines(0, df["timestamp"].min(), df["timestamp"].max(), colors="gray", linestyles="dashed")
+        ax2.scatter(df["timestamp"], residuals)
+        ax2.set_ylabel("잔차 (관측치 - 예측치)")
+        ax2.set_xlabel("시간")
+        plt.xticks(rotation=45)
+        st.pyplot(fig2)
 
     # ---- 광고비 모델 추가 (옵션) ----
     st.header("3️⃣ 광고비 모델 추가하기")
