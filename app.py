@@ -245,53 +245,37 @@ def main_ui():
         plt.xticks(rotation=45)
         st.pyplot(fig)
 
+            # 잔차 계산
+        y_pred = poly(x)
+        residuals = y - y_pred
+
+            # 잔차 통계
+        rmse = np.sqrt(np.mean(residuals**2))
+        st.markdown(f"**잔차(RMSE):** {rmse:,.0f} 회")
+
+            # 잔차 플롯
+        fig2, ax2 = plt.subplots(figsize=(8,3))
+        ax2.hlines(0, df["timestamp"].min(), df["timestamp"].max(), colors="gray", linestyles="dashed")
+        ax2.scatter(df["timestamp"], residuals)
+        ax2.set_ylabel("잔차 (관측치 - 예측치)")
+        ax2.set_xlabel("시간")
+        plt.xticks(rotation=45)
+        st.pyplot(fig2)
+
+        # ---- 광고비 모델 추가 (옵션) ----
+        st.header("3️⃣ 광고비 모델 추가하기")
+        budget = st.number_input("투입한 광고비를 입력하세요 (원 단위)", step=1000)
+        if st.button("모델에 반영"):
+            # 예: 조회수 = a * sqrt(budget)  이런 모델을 간단히 시연
+            a = coef[0] if len(coef)>0 else 1
+            pred = a * np.sqrt(budget)
+            st.write(f"예상 추가 조회수: {int(pred):,}회")
+
+
     else:
         # 실근이 없으면 경고만 띄우고 그래프는 생략
         st.warning("❗목표 조회수 돌파 시점을 회귀모델로 예측할 수 없습니다.")
 
-        # 시각화
-    fig, ax = plt.subplots(figsize=(8,4))
-    ax.scatter(df["timestamp"], y, label="실제 조회수")
-    ts = pd.date_range(df["timestamp"].min(), dt_future, periods=200)
-    xs = (ts - df["timestamp"].min()).total_seconds()
-    ax.plot(ts, poly(xs), color="orange", label="2차 회귀곡선")
-        
-        # x축 포맷 & 레이블 회전
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H:%M'))
-    fig.autofmt_xdate(rotation=45)
-
-    ax.set_xlabel("시간")
-    ax.set_ylabel("조회수")
-    ax.legend()
-
-    plt.tight_layout()
-    st.pyplot(fig)
-
-        # 잔차 계산
-    y_pred = poly(x)
-    residuals = y - y_pred
-
-        # 잔차 통계
-    rmse = np.sqrt(np.mean(residuals**2))
-    st.markdown(f"**잔차(RMSE):** {rmse:,.0f} 회")
-
-        # 잔차 플롯
-    fig2, ax2 = plt.subplots(figsize=(8,3))
-    ax2.hlines(0, df["timestamp"].min(), df["timestamp"].max(), colors="gray", linestyles="dashed")
-    ax2.scatter(df["timestamp"], residuals)
-    ax2.set_ylabel("잔차 (관측치 - 예측치)")
-    ax2.set_xlabel("시간")
-    plt.xticks(rotation=45)
-    st.pyplot(fig2)
-
-    # ---- 광고비 모델 추가 (옵션) ----
-    st.header("3️⃣ 광고비 모델 추가하기")
-    budget = st.number_input("투입한 광고비를 입력하세요 (원 단위)", step=1000)
-    if st.button("모델에 반영"):
-        # 예: 조회수 = a * sqrt(budget)  이런 모델을 간단히 시연
-        a = coef[0] if len(coef)>0 else 1
-        pred = a * np.sqrt(budget)
-        st.write(f"예상 추가 조회수: {int(pred):,}회")
 
 # === 메인 탭 구조 ===
 tab1, tab2 = st.tabs(["로그인", "회원가입"])
