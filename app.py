@@ -7,21 +7,24 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-import matplotlib.font_manager as fm
+from matplotlib import font_manager as fm, rcParams
 from datetime import datetime
 import os
 from oauth2client.service_account import ServiceAccountCredentials
 
-# 저장소에 넣어둔 TTF 파일 경로
-font_path = "fonts/NanumGothic.ttf"
+# 1) 상대 경로로 폰트 파일 위치 지정
+font_path = os.path.join("fonts", "NanumGothic.ttf")
 
-# Matplotlib에 폰트 등록
+# 2) 폰트 등록
 fm.fontManager.addfont(font_path)
+
+# 3) 실제 이름(Name)을 FontProperties 로부터 얻어오기
 prop = fm.FontProperties(fname=font_path)
 font_name = prop.get_name()
 
-# 전역 기본 폰트로 설정
-plt.rcParams["font.family"] = font_name
+# 4) 전역 설정
+rcParams["font.family"] = font_name
+# (필요하다면 rcParams["axes.unicode_minus"]=False 등도 같이 설정)
 
 # 마이너스 기호 깨짐 방지
 plt.rc('axes', unicode_minus=False)
