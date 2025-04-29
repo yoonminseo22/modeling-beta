@@ -210,20 +210,28 @@ def main_ui():
     coef = np.polyfit(x, y, 2)
     poly = np.poly1d(coef)
 
+    # 4) 목표조회수(예: 1_000_000) 일 때 방정식의 해 구하기
+    target = 1_000_000
+    roots = np.roots([coef[0], coef[1], coef[2] - target])
+
         # 식 문자열 만들기
     a, b, c = coef
     formula = f"y = {a:.3e} x² + {b:.3e} x + {c:.3e}"
     st.markdown(f"**2차 회귀식:**  `{formula}`")
 
-        # 100만 돌파 예상 시점
-        # coef[0]*t^2 + coef[1]*t + coef[2] = 1e6  를 풀기
-    roots = np.roots([coef[0], coef[1], coef[2] - 1e6])
-        # 실수 중 가장 큰 것
-    t_future = max(r.real for r in roots if abs(r.imag) < 1e-6)
-    dt_future = df["timestamp"].min() + pd.to_timedelta(t_future, unit="s")
+    # 4) 목표조회수(예: 1_000_000) 일 때 방정식의 해 구하기
+    target = 1_000_000
+    roots = np.roots([coef[0], coef[1], coef[2] - target])
 
-    st.write(f"▶️ 조회수 1,000,000회 돌파 예상 시점: **{dt_future}**")
-
+    # 5) 실수해만 골라내고 처리
+    real_roots = [r.real for r in roots if abs(r.imag) < 1e-6]
+    if real_roots:
+        t_offset = max(real_roots)
+        t_future = df["timestamp"].min() + pd.to_timedelta(t_offset, unit="s")
+        st.write(f"▶️ 조회수 {target:,}회 돌파 예상 시점: **{t_future}**")
+    else:
+        st.warning("❗목표 조회수 돌파 시점을 회귀모델로 예측할 수 없습니다.")
+        
         # 시각화
     fig, ax = plt.subplots(figsize=(8,4))
     ax.scatter(df["timestamp"], y, label="실제 조회수")
