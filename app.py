@@ -189,78 +189,74 @@ def main_ui():
 
     # ---- 데이터 불러오기 & 분석 ----
     st.header("2️⃣ 유튜브 조회수 분석하기")
-    records = yt_sheet.get_all_records()
+    all_records = yt_sheet.get_all_records()
+    records = [r for r in all_records if str(r("학번")) == sid]
     if not records:
-        st.info("아직 기록된 데이터가 없습니다.")
-    else:
-        df = pd.DataFrame(records)
+        st.info("내 기록이 아직 없습니다. 먼저 '1️⃣ 조회수 기록하기'로 기록하세요.")
+        return
 
-        # → **★ 로그인한 user['학번'] 만 필터**  
-        df = df[df["학번"] == str(user["학번"])]
-        if df.empty:
-            st.info("내 기록이 아직 없습니다. 먼저 '1️⃣ 조회수 기록하기'로 기록하세요.")
-            return
+    df = pd.DataFrame(records)
         
         # 날짜형 변환
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
-        df["viewCount"] = df["viewCount"].astype(int)
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df["viewCount"] = df["viewCount"].astype(int)
 
         # x: 시간(초 경과), y: 조회수
-        x = (df["timestamp"] - df["timestamp"].min()).dt.total_seconds().values
-        y = df["viewCount"].values
+    x = (df["timestamp"] - df["timestamp"].min()).dt.total_seconds().values
+    y = df["viewCount"].values
 
         # 2차 회귀
-        coef = np.polyfit(x, y, 2)
-        poly = np.poly1d(coef)
+    coef = np.polyfit(x, y, 2)
+    poly = np.poly1d(coef)
 
         # 식 문자열 만들기
-        a, b, c = coef
-        formula = f"y = {a:.3e} x² + {b:.3e} x + {c:.3e}"
-        st.markdown(f"**2차 회귀식:**  `{formula}`")
+    a, b, c = coef
+    formula = f"y = {a:.3e} x² + {b:.3e} x + {c:.3e}"
+    st.markdown(f"**2차 회귀식:**  `{formula}`")
 
         # 100만 돌파 예상 시점
         # coef[0]*t^2 + coef[1]*t + coef[2] = 1e6  를 풀기
-        roots = np.roots([coef[0], coef[1], coef[2] - 1e6])
+    roots = np.roots([coef[0], coef[1], coef[2] - 1e6])
         # 실수 중 가장 큰 것
-        t_future = max(r.real for r in roots if abs(r.imag) < 1e-6)
-        dt_future = df["timestamp"].min() + pd.to_timedelta(t_future, unit="s")
+    t_future = max(r.real for r in roots if abs(r.imag) < 1e-6)
+    dt_future = df["timestamp"].min() + pd.to_timedelta(t_future, unit="s")
 
-        st.write(f"▶️ 조회수 1,000,000회 돌파 예상 시점: **{dt_future}**")
+    st.write(f"▶️ 조회수 1,000,000회 돌파 예상 시점: **{dt_future}**")
 
         # 시각화
-        fig, ax = plt.subplots(figsize=(8,4))
-        ax.scatter(df["timestamp"], y, label="실제 조회수")
-        ts = pd.date_range(df["timestamp"].min(), dt_future, periods=200)
-        xs = (ts - df["timestamp"].min()).total_seconds()
-        ax.plot(ts, poly(xs), color="orange", label="2차 회귀곡선")
+    fig, ax = plt.subplots(figsize=(8,4))
+    ax.scatter(df["timestamp"], y, label="실제 조회수")
+    ts = pd.date_range(df["timestamp"].min(), dt_future, periods=200)
+    xs = (ts - df["timestamp"].min()).total_seconds()
+    ax.plot(ts, poly(xs), color="orange", label="2차 회귀곡선")
         
         # x축 포맷 & 레이블 회전
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H:%M'))
-        fig.autofmt_xdate(rotation=45)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H:%M'))
+    fig.autofmt_xdate(rotation=45)
 
-        ax.set_xlabel("시간")
-        ax.set_ylabel("조회수")
-        ax.legend()
+    ax.set_xlabel("시간")
+    ax.set_ylabel("조회수")
+    ax.legend()
 
-        plt.tight_layout()
-        st.pyplot(fig)
+    plt.tight_layout()
+    st.pyplot(fig)
 
         # 잔차 계산
-        y_pred = poly(x)
-        residuals = y - y_pred
+    y_pred = poly(x)
+    residuals = y - y_pred
 
         # 잔차 통계
-        rmse = np.sqrt(np.mean(residuals**2))
-        st.markdown(f"**잔차(RMSE):** {rmse:,.0f} 회")
+    rmse = np.sqrt(np.mean(residuals**2))
+    st.markdown(f"**잔차(RMSE):** {rmse:,.0f} 회")
 
         # 잔차 플롯
-        fig2, ax2 = plt.subplots(figsize=(8,3))
-        ax2.hlines(0, df["timestamp"].min(), df["timestamp"].max(), colors="gray", linestyles="dashed")
-        ax2.scatter(df["timestamp"], residuals)
-        ax2.set_ylabel("잔차 (관측치 - 예측치)")
-        ax2.set_xlabel("시간")
-        plt.xticks(rotation=45)
-        st.pyplot(fig2)
+    fig2, ax2 = plt.subplots(figsize=(8,3))
+    ax2.hlines(0, df["timestamp"].min(), df["timestamp"].max(), colors="gray", linestyles="dashed")
+    ax2.scatter(df["timestamp"], residuals)
+    ax2.set_ylabel("잔차 (관측치 - 예측치)")
+    ax2.set_xlabel("시간")
+    plt.xticks(rotation=45)
+    st.pyplot(fig2)
 
     # ---- 광고비 모델 추가 (옵션) ----
     st.header("3️⃣ 광고비 모델 추가하기")
