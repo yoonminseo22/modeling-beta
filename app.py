@@ -12,21 +12,12 @@ from datetime import datetime
 import os
 from oauth2client.service_account import ServiceAccountCredentials
 
-# 1) 상대 경로로 폰트 파일 위치 지정
+# 폰트 설정
 font_path = os.path.join("fonts", "NanumGothic.ttf")
-
-# 2) 폰트 등록
 fm.fontManager.addfont(font_path)
-
-# 3) 실제 이름(Name)을 FontProperties 로부터 얻어오기
 prop = fm.FontProperties(fname=font_path)
 font_name = prop.get_name()
-
-# 4) 전역 설정
 rcParams["font.family"] = font_name
-# (필요하다면 rcParams["axes.unicode_minus"]=False 등도 같이 설정)
-
-# 마이너스 기호 깨짐 방지
 plt.rc('axes', unicode_minus=False)
 
 st.set_page_config("📈 유튜브 조회수 분석기", layout="centered")
@@ -40,23 +31,22 @@ if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 if "user" not in st.session_state:
     st.session_state["user"] = None
+if "step" not in st.session_state:
+    st.session_state["step"] = 1  # 수업 단계
 
 
-# --- 1) 구글 서비스 계정으로 스프레드시트 인증 ---
+# 구글 시트 인증
 scope = ["https://spreadsheets.google.com/feeds","https://www.googleapis.com/auth/drive"]
 creds_dict = st.secrets["gcp_service_account"]
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 gc = gspread.authorize(creds)
 
-# --- 2) 시크릿에서 시트 정보 불러오기 ---
 yt_conf  = st.secrets["sheets"]["youtube"]  # 조회 기록용 시트
 usr_conf = st.secrets["sheets"]["users"]    # 회원DB용 시트
 YOUTUBE_API_KEY = st.secrets["youtube"]["api_key"]
 
-# --- 3) 각각의 워크시트 열기 ---
 yt_wb     = gc.open_by_key(yt_conf["spreadsheet_id"])
 yt_sheet  = yt_wb.worksheet(yt_conf["sheet_name"])
-
 usr_wb    = gc.open_by_key(usr_conf["spreadsheet_id"])
 usr_sheet = usr_wb.worksheet(usr_conf["sheet_name"])
 
@@ -164,105 +154,97 @@ def main_ui():
         st.experimental_rerun()
 
     user = st.session_state["user"]
-    sid = str(user["학번"])  # ← 여기서 sid 정의
+    sid = str(user["학번"]) 
     st.sidebar.success(f"👋 {user['이름']}님, 반갑습니다!")
     st.write("로그인에 성공했습니다! 이곳에서 유튜브 분석 기능을 사용하세요.")
+    col1,col2=st.sidebar.columns(2)
+    if col1.button('◀ 이전 단계') and st.session_state['step']>1:
+        st.session_state['step']-=1
+        st.experimental_rerun()
+    if col2.button('다음 단계 ▶') and st.session_state['step']<3:
+        st.session_state['step']+=1
+        st.experimental_rerun()
+    step=st.session_state['step']
+    st.info(f"현재  {step}차시 활동 중")
 
-    # ---- 유튜브 조회수 기록 ----
-    st.header("1️⃣ 유튜브 조회수 기록하기")
-    yt_url = st.text_input("유튜브 링크를 입력하세요")
-    if st.button("조회수 기록"):
-        vid = extract_video_id(yt_url)
-        if not vid:
-            st.error("⛔ 유효한 유튜브 링크가 아닙니다.")
-        else:
-            stats = get_video_statistics(vid)
-            if not stats:
-                st.error("😢 영상 정보를 불러올 수 없습니다.")
+    if step==1:
+        st.header("1️⃣ 유튜브 조회수 기록하기")
+        yt_url = st.text_input("유튜브 링크를 입력하세요")
+        if st.button("조회수 기록"):
+            vid = extract_video_id(yt_url)
+            if not vid:
+                st.error("⛔ 유효한 유튜브 링크가 아닙니다.")
             else:
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                # ['학번','video_id','timestamp','viewCount','likeCount','commentCount']
-                yt_sheet.append_row([
-                    user["학번"], vid, timestamp,
-                    stats["viewCount"], stats["likeCount"], stats["commentCount"]
-                ])
-                st.success("✅ 기록 완료")
+                stats = get_video_statistics(vid)
+                if not stats:
+                    st.error("😢 영상 정보를 불러올 수 없습니다.")
+                else:
+                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    # ['학번','video_id','timestamp','viewCount','likeCount','commentCount']
+                    yt_sheet.append_row([
+                        user["학번"], vid, timestamp,
+                        stats["viewCount"], stats["likeCount"], stats["commentCount"]
+                    ])
+                    st.success("✅ 기록 완료")
 
-    # ---- 데이터 불러오기 & 분석 ----
-    st.header("2️⃣ 유튜브 조회수 분석하기")
-    all_records = yt_sheet.get_all_records()
-    records = [r for r in all_records if str(r["학번"]) == sid]
-    if not records:
-        st.info("내 기록이 아직 없습니다. 먼저 '1️⃣ 조회수 기록하기'로 기록하세요.")
-        return
+    elif step==2:
+        st.header("2️⃣ 유튜브 조회수 분석하기")
+        all_records = yt_sheet.get_all_records()
+        records = [r for r in all_records if str(r["학번"]) == sid]
+        if not records:
+            st.info("내 기록이 아직 없습니다. 먼저 '1️⃣ 조회수 기록하기'로 기록하세요.")
+            return
+        df = pd.DataFrame(records)
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        df["viewCount"] = df["viewCount"].astype(int)
+        x = (df["timestamp"] - df["timestamp"].min()).dt.total_seconds().values
+        y = df["viewCount"].values
+        coef = np.polyfit(x, y, 2)
+        poly = np.poly1d(coef)
+        target = 1_000_000
+        roots = np.roots([coef[0], coef[1], coef[2] - target])
+        a, b, c = coef
+        formula = f"y = {a:.3e} x² + {b:.3e} x + {c:.3e}"
+        st.markdown(f"**2차 회귀식:**  `{formula}`")
+        if st.button('그래프 보기'):
+            target = 1_000_000
+            roots = np.roots([coef[0], coef[1], coef[2] - target])
+            real_roots = [r.real for r in roots if abs(r.imag) < 1e-6]
+            if real_roots:
+                t_future = max(real_roots)
+                dt_future = df["timestamp"].min() + pd.to_timedelta(t_future, unit="s")
+                st.write(f"▶️ 조회수 {target:,}회 돌파 예상 시점: **{dt_future}**")
 
-    df = pd.DataFrame(records)
-        
-        # 날짜형 변환
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
-    df["viewCount"] = df["viewCount"].astype(int)
+                ts = pd.date_range(df["timestamp"].min(), dt_future, periods=200)
+                xs = (ts - df["timestamp"].min()).total_seconds()
+                ys = coef[0]*xs**2 + coef[1]*xs + coef[2]
 
-        # x: 시간(초 경과), y: 조회수
-    x = (df["timestamp"] - df["timestamp"].min()).dt.total_seconds().values
-    y = df["viewCount"].values
+                fig, ax = plt.subplots(figsize=(8,4))
+                ax.scatter(df["timestamp"], y, label="실제 조회수")
+                ax.plot(ts, ys, color="orange", label="2차 회귀곡선")
+                ax.set_xlabel("시간")
+                ax.set_ylabel("조회수")
+                ax.legend()
+                plt.xticks(rotation=45)
+                st.pyplot(fig)
 
-        # 2차 회귀
-    coef = np.polyfit(x, y, 2)
-    poly = np.poly1d(coef)
+                y_pred = poly(x)
+                residuals = y - y_pred
 
-    # 4) 목표조회수(예: 1_000_000) 일 때 방정식의 해 구하기
-    target = 1_000_000
-    roots = np.roots([coef[0], coef[1], coef[2] - target])
+                rmse = np.sqrt(np.mean(residuals**2))
+                st.markdown(f"**잔차(RMSE):** {rmse:,.0f} 회")
 
-        # 식 문자열 만들기
-    a, b, c = coef
-    formula = f"y = {a:.3e} x² + {b:.3e} x + {c:.3e}"
-    st.markdown(f"**2차 회귀식:**  `{formula}`")
+                fig2, ax2 = plt.subplots(figsize=(8,3))
+                ax2.hlines(0, df["timestamp"].min(), df["timestamp"].max(), colors="gray", linestyles="dashed")
+                ax2.scatter(df["timestamp"], residuals)
+                ax2.set_ylabel("잔차 (관측치 - 예측치)")
+                ax2.set_xlabel("시간")
+                plt.xticks(rotation=45)
+                st.pyplot(fig2)
+            else:
+                st.warning("❗목표 조회수 돌파 시점을 회귀모델로 예측할 수 없습니다.")
 
-    # 2) 목표 조회수(예: 1,000,000) 돌파 시점 예측
-    target = 1_000_000
-    roots = np.roots([coef[0], coef[1], coef[2] - target])
-    real_roots = [r.real for r in roots if abs(r.imag) < 1e-6]
-
-    if real_roots:
-        # 실근이 있을 때만 계산
-        t_future = max(real_roots)
-        dt_future = df["timestamp"].min() + pd.to_timedelta(t_future, unit="s")
-        st.write(f"▶️ 조회수 {target:,}회 돌파 예상 시점: **{dt_future}**")
-
-        # 3) 예측 구간 생성
-        ts = pd.date_range(df["timestamp"].min(), dt_future, periods=200)
-        xs = (ts - df["timestamp"].min()).total_seconds()
-        ys = coef[0]*xs**2 + coef[1]*xs + coef[2]
-
-        # 4) 시각화
-        fig, ax = plt.subplots(figsize=(8,4))
-        ax.scatter(df["timestamp"], y, label="실제 조회수")
-        ax.plot(ts, ys, color="orange", label="2차 회귀곡선")
-        ax.set_xlabel("시간")
-        ax.set_ylabel("조회수")
-        ax.legend()
-        plt.xticks(rotation=45)
-        st.pyplot(fig)
-
-            # 잔차 계산
-        y_pred = poly(x)
-        residuals = y - y_pred
-
-            # 잔차 통계
-        rmse = np.sqrt(np.mean(residuals**2))
-        st.markdown(f"**잔차(RMSE):** {rmse:,.0f} 회")
-
-            # 잔차 플롯
-        fig2, ax2 = plt.subplots(figsize=(8,3))
-        ax2.hlines(0, df["timestamp"].min(), df["timestamp"].max(), colors="gray", linestyles="dashed")
-        ax2.scatter(df["timestamp"], residuals)
-        ax2.set_ylabel("잔차 (관측치 - 예측치)")
-        ax2.set_xlabel("시간")
-        plt.xticks(rotation=45)
-        st.pyplot(fig2)
-
-        # ---- 광고비 모델 추가 (옵션) ----
+    elif step==3:
         st.header("3️⃣ 광고비 모델 추가하기")
         budget = st.number_input("투입한 광고비를 입력하세요 (원 단위)", step=1000)
         if st.button("모델에 반영"):
@@ -270,11 +252,6 @@ def main_ui():
             a = coef[0] if len(coef)>0 else 1
             pred = a * np.sqrt(budget)
             st.write(f"예상 추가 조회수: {int(pred):,}회")
-
-
-    else:
-        # 실근이 없으면 경고만 띄우고 그래프는 생략
-        st.warning("❗목표 조회수 돌파 시점을 회귀모델로 예측할 수 없습니다.")
 
 
 # === 메인 탭 구조 ===
