@@ -110,7 +110,7 @@ def login_ui():
         st.session_state["logged_in"] = True
         st.session_state["user"] = user
         st.success(f"🎉 환영합니다, {user['이름']}님!")
-        st.experimental_rerun()
+        st.rerun()
         return
 
 # 유튜브 영상 ID 추출
@@ -155,10 +155,10 @@ def main_ui():
     col1,col2=st.sidebar.columns(2)
     if col1.button('◀ 이전 단계') and st.session_state['step']>1:
         st.session_state['step']-=1
-        st.experimental_rerun()
+        st.rerun()
     if col2.button('다음 단계 ▶') and st.session_state['step']<3:
         st.session_state['step']+=1
-        st.experimental_rerun()
+        st.rerun()
     step=st.session_state['step']
     st.info(f"현재  {step}차시 활동 중")
 
