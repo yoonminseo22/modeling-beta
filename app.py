@@ -148,11 +148,6 @@ def get_video_statistics(video_id):
 
 # --- 8) 메인 화면(로그인 후) ---
 def main_ui():
-    if st.sidebar.button("로그아웃"):
-        st.session_state["logged_in"] = False
-        st.session_state.pop("user", None)
-        st.experimental_rerun()
-
     user = st.session_state["user"]
     sid = str(user["학번"]) 
     st.sidebar.success(f"👋 {user['이름']}님, 반갑습니다!")
@@ -261,7 +256,6 @@ with tab1:
         login_ui()
     else:
         main_ui()
-
 with tab2:
     if not st.session_state["logged_in"]:
         signup_ui()
