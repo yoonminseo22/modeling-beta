@@ -162,6 +162,10 @@ def main_ui():
     step=st.session_state['step']
     st.info(f"현재  {step}차시 활동 중")
 
+    
+    all_records = yt_sheet.get_all_records()
+    records = [r for r in all_records if str(r["학번"]) == sid]
+
     if step==1:
         st.header("1️⃣ 유튜브 조회수 기록하기")
         yt_url = st.text_input("유튜브 링크를 입력하세요")
@@ -184,8 +188,6 @@ def main_ui():
 
     elif step==2:
         st.header("2️⃣ 유튜브 조회수 분석하기")
-        all_records = yt_sheet.get_all_records()
-        records = [r for r in all_records if str(r["학번"]) == sid]
         if not records:
             st.info("내 기록이 아직 없습니다. 먼저 '1️⃣ 조회수 기록하기'로 기록하세요.")
             return
