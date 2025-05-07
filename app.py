@@ -240,6 +240,13 @@ def main_ui():
                 st.warning("❗목표 조회수 돌파 시점을 회귀모델로 예측할 수 없습니다.")
 
     elif step==3:
+        records = [r for r in all_records if str(r["학번"]) == sid]
+        df = pd.DataFrame(records)
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        df["viewCount"]  = df["viewCount"].astype(int)
+        x = (df["timestamp"] - df["timestamp"].min()).dt.total_seconds().values
+        y = df["viewCount"].values
+        coef = np.polyfit(x, y, 2)
         st.header("3️⃣ 광고비 모델 추가하기")
         budget = st.number_input("투입한 광고비를 입력하세요 (원 단위)", step=1000)
         if st.button("모델에 반영"):
