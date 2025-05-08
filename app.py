@@ -316,7 +316,7 @@ with tab2:
 if "history" not in st.session_state:
     st.session_state["history"] = []
 if "chat_input" not in st.session_state:
-    st.session_state["chat_input"] = "새값"
+    st.session_state["chat_input"] = ""
 
 st.sidebar.markdown("## 🗨️ AI 챗봇")
 chat_input = st.sidebar.text_input(
@@ -341,7 +341,7 @@ if st.sidebar.button("전송"):
     st.session_state["history"].append(("🧑‍🎓", chat_input))
     st.session_state["history"].append(("🤖", answer))
     # 4) 입력창 리셋
-    st.session_state["chat_input"] = "새값"
+    st.session_state["chat_input"] = ""
 
 # 5) 대화 내용 보여주기
 for role, msg in st.session_state["history"]:
