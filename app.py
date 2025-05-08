@@ -304,7 +304,7 @@ if st.session_state["show_chat"]:
         st.session_state["chat_history"].append({"role":"user","content":user_input})
         # API 호출
         with st.spinner("GPT가 생각 중…"):
-            resp = openai.ChatCompletion.create(
+            resp = openai.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=st.session_state["chat_history"]
             )
