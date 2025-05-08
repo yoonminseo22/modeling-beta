@@ -171,7 +171,7 @@ def main_ui():
     if col1.button('◀ 이전 단계') and st.session_state['step']>1:
         st.session_state['step']-=1
         st.rerun()
-    if col2.button('다음 단계 ▶') and st.session_state['step']<3:
+    if col2.button('다음 단계 ▶') and st.session_state['step']<4:
         st.session_state['step']+=1
         st.rerun()
     step=st.session_state['step']
@@ -274,7 +274,7 @@ def main_ui():
 
     elif step==4:
         st.header("4️⃣ 토의 내용 입력 & 요약하기")
-        
+
         # 4차시 세션 구분 (예: A조, B조 등)
         session = st.selectbox("조를 선택하세요", ["A조","B조","C조"], key="session")
 
