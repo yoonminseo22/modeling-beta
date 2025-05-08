@@ -303,7 +303,7 @@ if st.sidebar.button("전송"):
     st.session_state["history"].append(("🧑‍🎓", chat_input))
     st.session_state["history"].append(("🤖", answer))
     # 4) 입력창 리셋
-    st.session_state["chat_input"] = ""
+    st.session_state["chat_input"] = "새값값"
 
 # 5) 대화 내용 보여주기
 for role, msg in st.session_state["history"]:
