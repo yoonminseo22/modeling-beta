@@ -293,7 +293,7 @@ if st.sidebar.button("전송"):
         messages.append({"role":"user" if role=="🧑‍🎓" else "assistant", "content":msg})
     messages.append({"role":"user","content": chat_input})
 
-    res = openai.ChatCompletion.create(
+    res = openai.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=messages
     )
