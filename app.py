@@ -343,13 +343,13 @@ if st.sidebar.button("전송"):
     # 4) 입력창 리셋
     st.session_state["chat_input"] = ""
 
-# 5) 대화 내용 보여주기
-for role, msg in st.session_state["history"]:
-    if role == "🧑‍🎓":
-        st.sidebar.markdown(f"**{role}:** {msg}")
-    else:
-        st.sidebar.markdown(f"**{role}:** {msg}")
+    # 5) 대화 내용 보여주기
+    for role, msg in st.session_state["history"]:
+        if role == "🧑‍🎓":
+            st.sidebar.markdown(f"**{role}:** {msg}")
+        else:
+            st.sidebar.markdown(f"**{role}:** {msg}")
 
-with st.expander("이전 대화 기록 보기"):
-    for turn in st.session_state.history:
-        st.markdown(f"**{turn['role']}**: {turn['content']}")
+    with st.expander("이전 대화 기록 보기"):
+        for turn in st.session_state.history:
+            st.markdown(f"**{turn['role']}**: {turn['content']}")
