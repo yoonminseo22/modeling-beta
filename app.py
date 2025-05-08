@@ -149,6 +149,47 @@ def get_video_statistics(video_id):
         }
     return None
 
+def summarize_discussion(text):
+    resp = openai.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role":"system", "content":"당신은 훌륭한 요약가입니다."},
+            {"role":"user", "content":f"다음 토의 내용을 짧고 깔끔하게 요약해주세요:\n\n{text}"}
+        ],
+        temperature=0.3,
+        max_tokens=300
+    )
+    return resp.choices[0].message.content.strip()
+
+
+def step4_ui():
+    st.header("4️⃣ 토의 내용 입력 & 요약하기")
+
+    # 4차시 세션 구분 (예: A조, B조 등)
+    session = st.selectbox("조를 선택하세요", ["A조","B조","C조"], key="session")
+
+    # 토의 내용 입력
+    raw = st.text_area("토의 내용을 입력하세요", key="discussion_raw", height=200)
+
+    if st.button("요약 & 저장"):
+        if not raw.strip():
+            st.error("토의 내용을 입력해야 합니다.")
+            return
+        with st.spinner("GPT에게 요약을 부탁하는 중..."):
+            summary = summarize_discussion(raw)
+        st.success("요약 완료!")
+        st.write("**요약본**")
+        st.write(summary)
+
+        # 스프레드시트 기록
+        ss = gc.open_by_key(yt_conf["spreadsheet_id"])
+        ds = ss.worksheet("토의요약")  # 미리 만들어두세요
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        ds.append_row([session, timestamp, raw, summary])
+        st.info("스프레드시트에 저장되었습니다.")
+
+
+
 # --- 8) 메인 화면(로그인 후) ---
 def main_ui():
     user = st.session_state["user"]
@@ -260,6 +301,9 @@ def main_ui():
             pred = a * np.sqrt(budget)
             st.write(f"예상 추가 조회수: {int(pred):,}회")
 
+    elif step == 4:
+        step4_ui()
+
 
 # === 메인 탭 구조 ===
 tab1, tab2 = st.tabs(["로그인", "회원가입"])
@@ -303,7 +347,7 @@ if st.sidebar.button("전송"):
     st.session_state["history"].append(("🧑‍🎓", chat_input))
     st.session_state["history"].append(("🤖", answer))
     # 4) 입력창 리셋
-    st.session_state["chat_input"] = "새값값"
+    st.session_state["chat_input"] = "새값"
 
 # 5) 대화 내용 보여주기
 for role, msg in st.session_state["history"]:
@@ -311,3 +355,7 @@ for role, msg in st.session_state["history"]:
         st.sidebar.markdown(f"**{role}:** {msg}")
     else:
         st.sidebar.markdown(f"**{role}:** {msg}")
+
+with st.expander("이전 대화 기록 보기"):
+    for turn in st.session_state.history:
+        st.markdown(f"**{turn['role']}**: {turn['content']}")
