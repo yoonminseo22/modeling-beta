@@ -278,7 +278,7 @@ with tab2:
 if "history" not in st.session_state:
     st.session_state["history"] = []
 if "chat_input" not in st.session_state:
-    st.session_state["chat_input"] = ""
+    st.session_state["chat_input"] = "새값"
 
 st.sidebar.markdown("## 🗨️ AI 챗봇")
 chat_input = st.sidebar.text_input(
