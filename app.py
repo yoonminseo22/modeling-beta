@@ -349,4 +349,4 @@ if submitted:
 
     with st.expander("이전 대화 기록 보기"):
         for turn in st.session_state["history"]:
-            st.markdown(f"**{turn['role']}**: {turn['content']}")
+            st.markdown(f"**{role}**: {msg}")
