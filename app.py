@@ -261,23 +261,35 @@ def main_ui():
                 dt_pred = base + pd.to_timedelta(t_pred, unit="s")
                 st.write(f"▶️ 조회수 **1,000,000회** 돌파 예상 시점: **{dt_pred}**")
 
-            # 8) 시각화
+            # (7) 그래프 그리기
             fig, ax = plt.subplots(figsize=(8,4))
+
             # 전체 실제 데이터
             ax.scatter(df["timestamp"], y_all, alpha=0.5, label="실제 조회수")
-            # 포물선 회귀곡선
-            ts_curve = np.linspace(0, t2 + dt3, 300)
-            ax.plot(base + pd.to_timedelta(ts_curve, unit="s"),
-                    a*ts_curve**2 + b*ts_curve + c,
-                    color="orange", label="2차 회귀곡선")
+
+            # 포물선 회귀곡선: x_sel 범위만 사용
+            ts_curve = np.linspace(x_sel.min(), x_sel.max(), 200)
+            ax.plot(
+                base + pd.to_timedelta(ts_curve, unit="s"),
+                a*ts_curve**2 + b*ts_curve + c,
+                color="orange", label="2차 회귀곡선"
+            )
+
             # 선택된 실제 점 (초록)
             ax.scatter(sel_times[:2], sel_vals[:2],
-                    color="green", s=50, label="선택된 실제 점")
+                    color="green", s=40, label="선택된 실제 점")
             # 합성된 점 (빨강)
             ax.scatter(ts3, int(y3),
-                    color="red", s=35, label="Synthetic 점")
+                    color="red", s=40, label="Synthetic 점")
+
             ax.set_xlabel("시간")
             ax.set_ylabel("조회수")
+
+            # (a) y축 범위를 실제 조회수 주변으로 한정
+            y_min = min(y_all.min(), y_sel.min()) * 0.9
+            y_max = max(y_all.max(), y_sel.max()) * 1.1
+            ax.set_ylim(y_min, y_max)
+
             ax.legend()
             plt.xticks(rotation=45)
             st.pyplot(fig)
