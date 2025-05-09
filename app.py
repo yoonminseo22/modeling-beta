@@ -206,88 +206,56 @@ def main_ui():
         if not records:
             st.info("내 기록이 아직 없습니다. 먼저 '1️⃣ 조회수 기록하기'로 기록하세요.")
             return
-        # (1) 기본 처리
+        # 1) 데이터 불러와서 전처리
         df = pd.DataFrame(records)
         df["timestamp"] = pd.to_datetime(df["timestamp"])
-        df["viewCount"]  = df["viewCount"].astype(int)
+        df["viewCount"] = df["viewCount"].astype(int)
+
+        # 기준 시각
         base_time = df["timestamp"].min()
+        # 전체 x, y (그래프용)
         x_all = (df["timestamp"] - base_time).dt.total_seconds().values
         y_all = df["viewCount"].values
 
-        # (2) 차분해서 순증가 여부 마스크 생성
-        inc_mask = df["viewCount"].diff().fillna(0) > 0
+        # 2) 최신 3점만 추출
+        df3 = df.tail(3)
+        x_sel = (df3["timestamp"] - base_time).dt.total_seconds().values
+        y_sel = df3["viewCount"].values
 
-        # (3) 연속된 True 구간(증가 구간)들 찾기
-        runs = []
-        current = []
-        for idx, inc in enumerate(inc_mask):
-            if inc:
-                current.append(idx)
-            else:
-                if current:
-                    runs.append(current)
-                    current = []
-        if current:
-            runs.append(current)
+        # 3) 2차 회귀
+        coef = np.polyfit(x_sel, y_sel, 2)
+        a, b, c = coef
+        poly = np.poly1d(coef)
 
-        # (4) 가장 긴 구간 선택
-        if not runs:
-            raise ValueError("증가 구간이 없습니다.")
-        longest = max(runs, key=len)
+        # 회귀식 표시
+        formula = f"y = {a:.3e} x² + {b:.3e} x + {c:.3e}"
+        st.markdown(f"**최신 3점 기반 2차 회귀식:** `{formula}`")
 
-        # (5) 그 구간에서 3점 추출 (시작, 중간, 끝)
-        i0 = longest[0]
-        i1 = longest[len(longest)//2]
-        i2 = longest[-1]
-        x_sel = x_all[[i0, i1, i2]]
-        y_sel = y_all[[i0, i1, i2]]
-
-        # (6) 2차 회귀
-        coef3 = np.polyfit(x_sel, y_sel, 2)
-        a, b, c = coef3
-        poly3 = np.poly1d(coef3)
-
-        # 회귀식 출력
-        formula3 = f"y = {a:.3e} x² + {b:.3e} x + {c:.3e}"
-        st.markdown(f"**순증가 3점 회귀식:** `{formula3}`")
-
-        # (7) 예측 및 그래프 (기존 코드와 동일하게)
+        # 4) 100만회 돌파 예측
         target = 1_000_000
-        roots = np.roots([coef3[0], coef3[1], coef3[2] - target])
+        roots = np.roots([a, b, c - target])
         real_roots = [r.real for r in roots if abs(r.imag) < 1e-6]
         if real_roots:
             t_future = max(real_roots)
             dt_future = base_time + pd.to_timedelta(t_future, unit="s")
             st.write(f"▶️ 조회수 {target:,}회 돌파 예상 시점: **{dt_future}**")
 
+            # 5) 그래프 그리기
             ts = pd.date_range(base_time, dt_future, periods=200)
             xs = (ts - base_time).total_seconds()
-            ys = coef3[0]*xs**2 + coef3[1]*xs + coef3[2]
+            ys = a*xs**2 + b*xs + c
 
             fig, ax = plt.subplots(figsize=(8,4))
             ax.scatter(df["timestamp"], y_all, label="실제 조회수")
-            ax.plot(ts, ys, label="3점 기반 2차 회귀곡선")
+            ax.plot(ts, ys, label="최신 3점 기반 2차 회귀곡선")
             ax.set_xlabel("시간")
             ax.set_ylabel("조회수")
             ax.legend()
             plt.xticks(rotation=45)
             st.pyplot(fig)
-
-            y_pred = poly(x)
-            residuals = y - y_pred
-
-            rmse = np.sqrt(np.mean(residuals**2))
-            st.markdown(f"**잔차(RMSE):** {rmse:,.0f} 회")
-
-            fig2, ax2 = plt.subplots(figsize=(8,3))
-            ax2.hlines(0, df["timestamp"].min(), df["timestamp"].max(), colors="gray", linestyles="dashed")
-            ax2.scatter(df["timestamp"], residuals)
-            ax2.set_ylabel("잔차 (관측치 - 예측치)")
-            ax2.set_xlabel("시간")
-            plt.xticks(rotation=45)
-            st.pyplot(fig2)
         else:
-            st.warning("❗목표 조회수 돌파 시점을 회귀모델로 예측할 수 없습니다.")
+            st.warning("실근이 없어 예측 시점을 계산할 수 없습니다.")
+
 
     elif step==3:
         records = [r for r in all_records if str(r["학번"]) == sid]
