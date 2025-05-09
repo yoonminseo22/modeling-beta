@@ -216,82 +216,75 @@ def main_ui():
             df = df.sort_values("timestamp").reset_index(drop=True)
 
             base = df["timestamp"].min()
-            x = (df["timestamp"] - base).dt.total_seconds().values
-            y = df["viewCount"].values
+            x_all = (df["timestamp"] - base).dt.total_seconds().values
+            y_all = df["viewCount"].values
 
-            if len(df) < 3:
-                st.error("데이터가 3개 미만이어서 2차 회귀가 불가능합니다.")
+            # 2) 마지막 두 점 (실제 데이터)
+            idx1, idx2 = len(df)-2, len(df)-1
+            t1, t2 = x_all[idx1], x_all[idx2]
+            y1, y2 = y_all[idx1], y_all[idx2]
+            dt = t2 - t1
+            slope = (y2 - y1) / dt
+
+            # 3) 가속도 계산 (추가 포인트 위해 고정 가속도)
+            # 기존 두 구간에서 accel 정의 (없으면 기본값 지정)
+            if len(df) >= 3:
+                t0 = x_all[idx1-1]
+                y0 = y_all[idx1-1]
+                s1 = (y1 - y0) / (t1 - t0) if t1!=t0 else slope
+                s2 = slope
+                accel = (s2 - s1) / (t1 - t0)  # 2차 미분 근사
+                if abs(accel) < 1e-8:
+                    accel = slope / (t2 - t1)  # fallback accel
             else:
-                # 2) 마지막 세 점에서 두 구간의 증가율(기울기) 계산
-                i0, i1, i2 = len(df) - 3, len(df) - 2, len(df) - 1
-                dt1 = x[i1] - x[i0]
-                dt2 = x[i2] - x[i1]
-                s1 = (y[i1] - y[i0]) / dt1
-                s2 = (y[i2] - y[i1]) / dt2
+                accel = slope / dt
 
-                # 3) synthetic 세 번째 점 생성 (가속도 = (s2 - s1)/dt2 를 유지)
-                accel = (s2 - s1) / dt2
-                dt = dt2
-                s3 = s2 + accel * dt
-                x3 = x[i2] + dt
-                y3 = y[i2] + s3 * dt
-                ts3 = base + pd.to_timedelta(x3, unit="s")
+            # 4) synthetic point 생성 (dt 확장)
+            dt3 = dt * 1.5
+            s3 = slope + accel * dt3
+            t3 = t2 + dt3
+            y3 = y2 + s3 * dt3
+            ts3 = base + pd.to_timedelta(t3, unit="s")
 
-                # 4) 회귀에 쓸 세 점 (i1, i2, synthetic)
-                sel_times = [
-                    df.loc[i1, "timestamp"],
-                    df.loc[i2, "timestamp"],
-                    ts3
-                ]
-                sel_views = [
-                    y[i1],
-                    y[i2],
-                    int(y3)
-                ]
+            # 5) 세 점으로 회귀
+            sel_ts = [base + pd.to_timedelta(t1, unit="s"),
+                    base + pd.to_timedelta(t2, unit="s"),
+                    ts3]
+            sel_y = [y1, y2, int(y3)]
+            x_sel = np.array([(t - base).total_seconds() for t in sel_ts])
+            y_sel = np.array(sel_y)
 
-                # 5) 2차 회귀
-                x_sel = np.array([(t - base).total_seconds() for t in sel_times])
-                y_sel = np.array(sel_views)
-                a, b, c = np.polyfit(x_sel, y_sel, 2)
+            a, b, c = np.polyfit(x_sel, y_sel, 2)
+            st.markdown(f"**회귀식:** `y = {a:.3e}·x² + {b:.3e}·x + {c:.3e}`")
 
-                st.markdown(f"**회귀식:** `y = {a:.3e}·x² + {b:.3e}·x + {c:.3e}`")
+            # 6) 예측
+            roots = np.roots([a, b, c - 1_000_000])
+            real_roots = [r.real for r in roots if abs(r.imag) < 1e-6]
+            if real_roots:
+                t_pred = max(real_roots)
+                dt_pred = base + pd.to_timedelta(t_pred, unit="s")
+                st.write(f"▶️ 1,000,000회 돌파 예상: **{dt_pred}**")
 
-                # 6) 100만 돌파 예측
-                roots = np.roots([a, b, c - 1_000_000])
-                real_roots = [r.real for r in roots if abs(r.imag) < 1e-6]
-                if real_roots:
-                    t_pred = max(real_roots)
-                    dt_pred = base + pd.to_timedelta(t_pred, unit="s")
-                    st.write(f"▶️ 조회수 **1,000,000회** 돌파 예상 시점: **{dt_pred}**")
-
-                # 7) 그래프
-                fig, ax = plt.subplots(figsize=(8,4))
-                # 전체 실제 데이터
-                ax.scatter(df["timestamp"], y, label="실제 조회수", alpha=0.5)
-                # 회귀 곡선
-                ts_curve = np.linspace(0, x[-1] + dt, 300)
-                ax.plot(
-                    base + pd.to_timedelta(ts_curve, unit="s"),
+            # 7) 그래프
+            fig, ax = plt.subplots(figsize=(8,4))
+            ax.scatter(df["timestamp"], y_all, alpha=0.5, label="실제 데이터")
+            ts_curve = np.linspace(0, t2 + dt3, 300)
+            ax.plot(base + pd.to_timedelta(ts_curve, unit="s"),
                     a*ts_curve**2 + b*ts_curve + c,
-                    color="orange", label="2차 회귀곡선"
-                )
-                # 선택된 실제 점 (초록)
-                ax.scatter(
-                    [sel_times[0], sel_times[1]],
-                    [sel_views[0], sel_views[1]],
-                    color="green", s=80, label="선택된 실제 점"
-                )
-                # 합성된 점 (빨강)
-                ax.scatter(
-                    ts3, int(y3),
-                    color="red", s=80, label="Synthetic 점"
-                )
-                ax.set_xlabel("시간")
-                ax.set_ylabel("조회수")
-                ax.legend()
-                plt.xticks(rotation=45)
-                st.pyplot(fig)
-                
+                    color="orange", label="강제 이차 회귀곡선")
+
+            # 실제 선택 점
+            ax.scatter([sel_ts[0], sel_ts[1]], [sel_y[0], sel_y[1]],
+                    color="green", s=80, label="선택된 실제 점")
+            # synthetic 점
+            ax.scatter(ts3, int(y3), color="red", s=100, label="합성된 점")
+
+            ax.set_xlabel("시간")
+            ax.set_ylabel("조회수")
+            ax.legend()
+            plt.xticks(rotation=45)
+            st.pyplot(fig)
+
     elif step==3:
         records = [r for r in all_records if str(r["학번"]) == sid]
         df = pd.DataFrame(records)
