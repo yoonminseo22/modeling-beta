@@ -387,12 +387,28 @@ def main_ui():
         plt.xticks(rotation=45)
         st.pyplot(fig)
 
-        if st.button("적합도 평가 & 요약 저장"):
+        if st.button("적합도 평가"):
             # 1) MAE, RMSE 계산
-            y_pred_full = time_poly(x_all) + gamma * np.sqrt(budget)
-            mae  = np.mean(np.abs(y_all - y_pred_full))
-            rmse = np.sqrt(np.mean((y_all - y_pred_full)**2))
+            y_pred_full = time_poly(x) + gamma * np.sqrt(budget)
+            mae  = np.mean(np.abs(y - y_pred_full))
+            rmse = np.sqrt(np.mean((y - y_pred_full)**2))
             st.write(f"**평균절대오차(MAE):** {mae:,.2f}")
+
+        # ── 0) 학생 의견 입력란 추가 ──
+        st.subheader("💬 적합도 평가에 대한 의견을 남겨주세요")
+        opinion_input = st.text_area(
+            "모델 예측 결과와 실제 조회수의 차이에 대해 느낀 점이나 개선할 점을 자유롭게 적어주세요.",
+            height=100,
+            placeholder="예) 저는 예측 모델이 너무 보수적이라 아쉬웠습니다…"
+        )
+        if st.button("의견 제출"):
+            # all_records 는 세션 내에 유지되는 리스트라고 가정
+            all_records.append({
+                "step": 3,
+                "학번": sid,
+                "opinion": opinion_input
+            })
+            st.success("의견이 기록되었습니다!")
 
         # 10) 요약하기
         if st.button("의견 요약 & 시트 저장"):
