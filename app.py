@@ -320,7 +320,6 @@ def main_ui():
             st.pyplot(fig)
 
     elif step==3:
-        records = [r for r in all_records if str(r["학번"]) == sid]
         df = pd.DataFrame(records)
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         df["viewCount"]  = df["viewCount"].astype(int)
