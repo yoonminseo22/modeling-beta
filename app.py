@@ -215,16 +215,18 @@ def main_ui():
         x_all = (df["timestamp"] - base_time).dt.total_seconds().values
         y_all = df["viewCount"].values
 
-        # 2) 1차·2차 차분 계산
-        df["diff1"] = df["viewCount"].diff()                # 증가량
-        df["diff2"] = df["diff1"].diff()                   # 증가량의 변화
+        # 1) 1차·2차 차분 계산
+        df["diff1"] = df["viewCount"].diff()      # 증가량
+        df["diff2"] = df["diff1"].diff()          # 증가량의 변화
 
-        # 3) 가속(d2>0) 마스크와 연속 구간 탐색
-        acc_mask = df["diff2"] > 0
+        # 2) '증가 & 가속' 마스크
+        mask = (df["diff1"] > 0) & (df["diff2"] > 0)
+
+        # 3) 연속 구간 찾기
         runs = []
         cur = []
-        for i, flag in enumerate(acc_mask):
-            if flag:
+        for i, ok in enumerate(mask):
+            if ok:
                 cur.append(i)
             else:
                 if cur:
@@ -236,18 +238,17 @@ def main_ui():
         if not runs:
             st.warning("가속 구간이 없습니다.")
         else:
-            # 4) 가장 긴 가속 구간 선택
+           # 4) 가장 길고 안정적인 구간 선택
             longest = max(runs, key=len)
-            # 5) 그 구간에서 시작·중간·끝 세 점 뽑기
+            # 5) 그 구간에서 세 점 (시작ㆍ중간ㆍ끝) 인덱스
             i0 = longest[0]
             i1 = longest[len(longest)//2]
             i2 = longest[-1]
-            x_sel = x_all[[i0, i1, i2]]
-            y_sel = y_all[[i0, i1, i2]]
 
-            # 6) 2차 회귀
-            coef = np.polyfit(x_sel, y_sel, 2)
-            a, b, c = coef
+            # 6) 회귀
+            x_sel = (df["timestamp"] - base_time).dt.total_seconds().values[[i0, i1, i2]]
+            y_sel = df["viewCount"].values[[i0, i1, i2]]
+            a, b, c = np.polyfit(x_sel, y_sel, 2)
             formula = f"y = {a:.3e} x² + {b:.3e} x + {c:.3e}"
             st.markdown(f"**가속 구간 기반 2차 회귀식:** `{formula}`")
 
