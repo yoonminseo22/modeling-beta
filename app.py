@@ -340,13 +340,6 @@ if submitted:
     st.session_state["history"].append(("🧑‍🎓", chat_input))
     st.session_state["history"].append(("🤖", answer))
 
-    # 5) 대화 내용 보여주기
-    for role, msg in st.session_state["history"]:
-        if role == "🧑‍🎓":
-            st.sidebar.markdown(f"**{role}:** {msg}")
-        else:
-            st.sidebar.markdown(f"**{role}:** {msg}")
-
     with st.expander("이전 대화 기록 보기"):
         for turn in st.session_state["history"]:
             st.markdown(f"**{role}**: {msg}")
