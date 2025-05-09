@@ -270,7 +270,7 @@ def main_ui():
                 dt_pred = base + pd.to_timedelta(t_pred, unit="s")
                 st.write(f"▶️ 1,000,000회 돌파 예상 시점: **{dt_pred}**")
 
-            # 9) 시각화
+            # 9) 시각화: x축도 가속 구간 + synthetic 포함 구역만
             fig, ax = plt.subplots(figsize=(8,4))
             ax.scatter(df["timestamp"], y_all, alpha=0.4, label="실제 조회수")
 
@@ -282,18 +282,17 @@ def main_ui():
                 color="orange", label="2차 회귀곡선"
             )
 
-            # 선택된 실제 점
-            ax.scatter(sel_times[0], sel_vals[0], color="green", s=40, label="실제 점①")
-            ax.scatter(sel_times[1], sel_vals[1], color="green", s=40, label="실제 점②")
-            # 합성된 점
-            ax.scatter(ts3, int(y3), color="red", s=40, label="Synthetic 점③")
+            # 선택된 실제 점 (초록)
+            ax.scatter(sel_times[0], sel_vals[0], color="green", s=80, label="실제 점①")
+            ax.scatter(sel_times[1], sel_vals[1], color="green", s=80, label="실제 점②")
 
-            # → 전체 데이터 영역으로 x축 범위 설정
-            ax.set_xlim(df["timestamp"].min(), df["timestamp"].max())
+            # 합성된 점 (빨강)
+            ax.scatter(ts3, int(y3), color="red", s=100, label="Synthetic 점③")
 
-            # y축은 필요하면 그대로 두거나, 아래처럼 축소
-            y_min = min(y_sel.min(), y_all.min()) * 0.9
-            y_max = max(y_sel.max(), y_all.max()) * 1.1
+            # 축 범위 한정
+            pad_x = (ts3 - sel_times[0]) * 0.1
+            ax.set_xlim(sel_times[0] - pad_x, ts3 + pad_x)
+            y_min, y_max = min(y_sel.min(), y_all.min())*0.9, max(y_sel.max(), y_all.max())*1.1
             ax.set_ylim(y_min, y_max)
 
             ax.set_xlabel("시간")
