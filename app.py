@@ -206,6 +206,7 @@ def main_ui():
         if not records:
             st.info("내 기록이 아직 없습니다. 먼저 '1️⃣ 조회수 기록하기'로 기록하세요.")
             return
+        df = pd.DataFrame(records)
         # (1) 전처리
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         df["viewCount"] = df["viewCount"].astype(int)
