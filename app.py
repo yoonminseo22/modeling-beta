@@ -414,7 +414,6 @@ def main_ui():
             ds.append_row([session, timestamp, raw, summary])
             st.info("스프레드시트에 저장되었습니다.")
 
-
 # === 메인 탭 구조 ===
 tab1, tab2 = st.tabs(["로그인", "회원가입"])
 with tab1:
