@@ -219,80 +219,96 @@ def main_ui():
             x_all = (df["timestamp"] - base).dt.total_seconds().values
             y_all = df["viewCount"].values
 
-            # 2) 1차·2차 차분 계산 (증가량, 증가량의 변화)
-            df["diff1"] = df["viewCount"].diff()
-            df["diff2"] = df["diff1"].diff()
+            # 2) 가능한 3점 조합 중 'a>0' & f' >0 on interval' 조건 만족 조합 찾기
+            candidates = []
+            for i, j, k in combinations(range(len(df)), 3):
+                xi = x_all[[i, j, k]]
+                yi = y_all[[i, j, k]]
+                a_coef, b_coef, _ = np.polyfit(xi, yi, 2)
 
-            # 3) 가속(d2>0)인 인덱스 구하기
-            acc_idx = df.index[(df["diff1"] > 0) & (df["diff2"] > 0)].to_list()
+                # concave up
+                if a_coef <= 0:
+                    continue
 
-            # 만약 가속 구간이 2개 이상 존재하면 그곳에서 최초·최종 선택
-            if len(acc_idx) >= 2:
-                i1, i2 = acc_idx[0], acc_idx[-1]
+                # derivative positive at i and k
+                deriv_i = 2 * a_coef * xi[0] + b_coef
+                deriv_k = 2 * a_coef * xi[2] + b_coef
+                if deriv_i <= 0 or deriv_k <= 0:
+                    continue
+
+                # fit error
+                y_pred = a_coef*xi**2 + b_coef*xi + _
+                mse = np.mean((yi - y_pred)**2)
+                candidates.append((mse, (i, j, k)))
+
+            if candidates:
+                # best triple by lowest MSE
+                _, (i1, i2, i3) = min(candidates, key=lambda x: x[0])
+                synthetic = None
+                sel_idx = [i1, i2, i3]
             else:
-                # fallback: 전체 중 최초·최종
-                i1, i2 = 0, len(df)-1
+                # fallback: last two + synthetic
+                i1, i2 = len(df)-2, len(df)-1
+                dt = x_all[i2] - x_all[i1]
+                slope_last = (y_all[i2] - y_all[i1]) / dt
+                # amplify slope to enforce accel>0
+                slope3 = slope_last * 1.2
+                t3 = x_all[i2] + dt
+                y3 = y_all[i2] + slope3 * dt
+                ts3 = base + pd.to_timedelta(t3, unit="s")
+                synthetic = {"timestamp": ts3, "viewCount": int(y3)}
+                sel_idx = [i1, i2, "synthetic"]
 
-            # 4) 두 점 사이 Δt, 증가율, 가속도 계산
-            t1, t2 = x_all[i1], x_all[i2]
-            y1, y2 = y_all[i1], y_all[i2]
-            dt = t2 - t1
-            s1 = (y_all[i1] - y_all[max(i1-1,0)]) / (t1 - x_all[max(i1-1,0)]) if i1>0 else (y2-y1)/dt
-            s2 = (y2 - y1) / dt
-            accel = (s2 - s1) / dt
+            # 3) 선택된 점 DataFrame
+            pts = []
+            for idx in sel_idx:
+                if idx == "synthetic":
+                    pts.append(synthetic)
+                else:
+                    pts.append({
+                        "timestamp": df.loc[idx, "timestamp"],
+                        "viewCount": int(df.loc[idx, "viewCount"])
+                    })
+            sel_df = pd.DataFrame(pts)
 
-            # 5) 동일 Δt 후 synthetic 점 생성
-            t3 = t2 + dt
-            s3 = s2 + accel * dt
-            y3 = y2 + s3 * dt
-            ts3 = base + pd.to_timedelta(t3, unit="s")
-
-            # 6) 회귀에 쓸 세 점
-            sel_times = [
-                base + pd.to_timedelta(t1, unit="s"),
-                base + pd.to_timedelta(t2, unit="s"),
-                ts3,
-            ]
-            sel_vals = [y1, y2, int(y3)]
-
-            # 7) 2차 회귀
-            x_sel = np.array([(t - base).total_seconds() for t in sel_times])
-            y_sel = np.array(sel_vals)
+            # 4) regression
+            x_sel = (sel_df["timestamp"] - base).dt.total_seconds().values
+            y_sel = sel_df["viewCount"].values
             a, b, c = np.polyfit(x_sel, y_sel, 2)
 
             st.markdown(f"**회귀식:** `y = {a:.3e}·x² + {b:.3e}·x + {c:.3e}`")
 
-            # 8) 1,000,000회 예측
+            # 5) 예측
             roots = np.roots([a, b, c - 1_000_000])
-            real_roots = [r.real for r in roots if abs(r.imag) < 1e-6]
-            if real_roots:
-                t_pred = max(real_roots)
+            rr = [r.real for r in roots if abs(r.imag) < 1e-6]
+            if rr:
+                t_pred = max(rr)
                 dt_pred = base + pd.to_timedelta(t_pred, unit="s")
-                st.write(f"▶️ 1,000,000회 돌파 예상 시점: **{dt_pred}**")
+                st.write(f"▶️ 조회수 **1,000,000회** 돌파 예상 시점: **{dt_pred}**")
 
-            # 9) 시각화: x축도 가속 구간 + synthetic 포함 구역만
+            # 6) 시각화
             fig, ax = plt.subplots(figsize=(8,4))
-            ax.scatter(df["timestamp"], y_all, alpha=0.4, label="실제 조회수")
-
+            # 전체 데이터
+            ax.scatter(df["timestamp"], y_all, color="skyblue", alpha=0.6, s=20, label="전체 실제 데이터")
             # 포물선 곡선
             ts_curve = np.linspace(x_sel.min(), x_sel.max(), 200)
-            ax.plot(
-                base + pd.to_timedelta(ts_curve, unit="s"),
-                a*ts_curve**2 + b*ts_curve + c,
-                color="orange", label="2차 회귀곡선"
-            )
+            ax.plot(base + pd.to_timedelta(ts_curve, unit="s"),
+                    a*ts_curve**2 + b*ts_curve + c,
+                    color="orange", lw=2, label="2차 회귀곡선")
+            # 실제 선택 점
+            real_idxs = [idx for idx in sel_idx if idx != "synthetic"]
+            ax.scatter(df.loc[real_idxs, "timestamp"], df.loc[real_idxs, "viewCount"],
+                    color="green", s=80, label="선택된 실제 점")
+            # synthetic 점
+            if synthetic:
+                ax.scatter(synthetic["timestamp"], synthetic["viewCount"],
+                        color="red", s=100, label="Synthetic 점")
 
-            # 선택된 실제 점 (초록)
-            ax.scatter(sel_times[0], sel_vals[0], color="green", s=80, label="실제 점①")
-            ax.scatter(sel_times[1], sel_vals[1], color="green", s=80, label="실제 점②")
-
-            # 합성된 점 (빨강)
-            ax.scatter(ts3, int(y3), color="red", s=100, label="Synthetic 점③")
-
-            # 축 범위 한정
-            pad_x = (ts3 - sel_times[0]) * 0.1
-            ax.set_xlim(sel_times[0] - pad_x, ts3 + pad_x)
-            y_min, y_max = min(y_sel.min(), y_all.min())*0.9, max(y_sel.max(), y_all.max())*1.1
+            # x축 전체
+            ax.set_xlim(df["timestamp"].min(), df["timestamp"].max())
+            # y축
+            y_min = min(y_all.min(), y_sel.min()) * 0.9
+            y_max = max(y_all.max(), y_sel.max()) * 1.1
             ax.set_ylim(y_min, y_max)
 
             ax.set_xlabel("시간")
