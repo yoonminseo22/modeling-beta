@@ -261,13 +261,13 @@ def main_ui():
                 dt_pred = base + pd.to_timedelta(t_pred, unit="s")
                 st.write(f"▶️ 조회수 **1,000,000회** 돌파 예상 시점: **{dt_pred}**")
 
-            # (7) 그래프 그리기
+            # (7) 그래프
             fig, ax = plt.subplots(figsize=(8,4))
 
             # 전체 실제 데이터
             ax.scatter(df["timestamp"], y_all, alpha=0.5, label="실제 조회수")
 
-            # 포물선 회귀곡선: x_sel 범위만 사용
+            # 포물선 회귀곡선
             ts_curve = np.linspace(x_sel.min(), x_sel.max(), 200)
             ax.plot(
                 base + pd.to_timedelta(ts_curve, unit="s"),
@@ -277,23 +277,28 @@ def main_ui():
 
             # 선택된 실제 점 (초록)
             ax.scatter(sel_times[:2], sel_vals[:2],
-                    color="green", s=40, label="선택된 실제 점")
+                    color="green", s=80, label="선택된 실제 점")
             # 합성된 점 (빨강)
             ax.scatter(ts3, int(y3),
-                    color="red", s=40, label="Synthetic 점")
+                    color="red", s=100, label="Synthetic 점")
+
+            # ── 여기서 x축 범위 한정 ──
+            start = sel_times[0]                     # 첫 번째 선택된 실제 점 시간
+            end   = ts3                              # 합성된 점 시간
+            pad   = (end - sel_times[0]) * 0.1       # 10% 여유
+            ax.set_xlim(start - pad, end + pad)
+
+            # y축 범위도 원하시면 비슷하게 설정
+            y_min = min(y_sel.min(), y_all.min()) * 0.9
+            y_max = max(y_sel.max(), y_all.max()) * 1.1
+            ax.set_ylim(y_min, y_max)
 
             ax.set_xlabel("시간")
             ax.set_ylabel("조회수")
-
-            # (a) y축 범위를 실제 조회수 주변으로 한정
-            y_min = min(y_all.min(), y_sel.min()) * 0.9
-            y_max = max(y_all.max(), y_sel.max()) * 1.1
-            ax.set_ylim(y_min, y_max)
-
             ax.legend()
             plt.xticks(rotation=45)
             st.pyplot(fig)
-
+            
     elif step==3:
         records = [r for r in all_records if str(r["학번"]) == sid]
         df = pd.DataFrame(records)
