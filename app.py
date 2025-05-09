@@ -272,10 +272,10 @@ def main_ui():
                     color="orange", label="2차 회귀곡선")
             # 선택된 실제 점 (초록)
             ax.scatter(sel_times[:2], sel_vals[:2],
-                    color="green", s=80, label="선택된 실제 점")
+                    color="green", s=50, label="선택된 실제 점")
             # 합성된 점 (빨강)
             ax.scatter(ts3, int(y3),
-                    color="red", s=100, label="Synthetic 점")
+                    color="red", s=35, label="Synthetic 점")
             ax.set_xlabel("시간")
             ax.set_ylabel("조회수")
             ax.legend()
