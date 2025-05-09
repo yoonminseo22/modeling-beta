@@ -206,55 +206,74 @@ def main_ui():
         if not records:
             st.info("내 기록이 아직 없습니다. 먼저 '1️⃣ 조회수 기록하기'로 기록하세요.")
             return
-        # 1) 데이터 불러와서 전처리
         df = pd.DataFrame(records)
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         df["viewCount"] = df["viewCount"].astype(int)
 
         # 기준 시각
         base_time = df["timestamp"].min()
-        # 전체 x, y (그래프용)
         x_all = (df["timestamp"] - base_time).dt.total_seconds().values
         y_all = df["viewCount"].values
 
-        # 2) 최신 3점만 추출
-        df3 = df.tail(3)
-        x_sel = (df3["timestamp"] - base_time).dt.total_seconds().values
-        y_sel = df3["viewCount"].values
+        # 2) 1차·2차 차분 계산
+        df["diff1"] = df["viewCount"].diff()                # 증가량
+        df["diff2"] = df["diff1"].diff()                   # 증가량의 변화
 
-        # 3) 2차 회귀
-        coef = np.polyfit(x_sel, y_sel, 2)
-        a, b, c = coef
-        poly = np.poly1d(coef)
+        # 3) 가속(d2>0) 마스크와 연속 구간 탐색
+        acc_mask = df["diff2"] > 0
+        runs = []
+        cur = []
+        for i, flag in enumerate(acc_mask):
+            if flag:
+                cur.append(i)
+            else:
+                if cur:
+                    runs.append(cur)
+                    cur = []
+        if cur:
+            runs.append(cur)
 
-        # 회귀식 표시
-        formula = f"y = {a:.3e} x² + {b:.3e} x + {c:.3e}"
-        st.markdown(f"**최신 3점 기반 2차 회귀식:** `{formula}`")
-
-        # 4) 100만회 돌파 예측
-        target = 1_000_000
-        roots = np.roots([a, b, c - target])
-        real_roots = [r.real for r in roots if abs(r.imag) < 1e-6]
-        if real_roots:
-            t_future = max(real_roots)
-            dt_future = base_time + pd.to_timedelta(t_future, unit="s")
-            st.write(f"▶️ 조회수 {target:,}회 돌파 예상 시점: **{dt_future}**")
-
-            # 5) 그래프 그리기
-            ts = pd.date_range(base_time, dt_future, periods=200)
-            xs = (ts - base_time).total_seconds()
-            ys = a*xs**2 + b*xs + c
-
-            fig, ax = plt.subplots(figsize=(8,4))
-            ax.scatter(df["timestamp"], y_all, label="실제 조회수")
-            ax.plot(ts, ys, label="최신 3점 기반 2차 회귀곡선")
-            ax.set_xlabel("시간")
-            ax.set_ylabel("조회수")
-            ax.legend()
-            plt.xticks(rotation=45)
-            st.pyplot(fig)
+        if not runs:
+            st.warning("가속 구간이 없습니다.")
         else:
-            st.warning("실근이 없어 예측 시점을 계산할 수 없습니다.")
+            # 4) 가장 긴 가속 구간 선택
+            longest = max(runs, key=len)
+            # 5) 그 구간에서 시작·중간·끝 세 점 뽑기
+            i0 = longest[0]
+            i1 = longest[len(longest)//2]
+            i2 = longest[-1]
+            x_sel = x_all[[i0, i1, i2]]
+            y_sel = y_all[[i0, i1, i2]]
+
+            # 6) 2차 회귀
+            coef = np.polyfit(x_sel, y_sel, 2)
+            a, b, c = coef
+            formula = f"y = {a:.3e} x² + {b:.3e} x + {c:.3e}"
+            st.markdown(f"**가속 구간 기반 2차 회귀식:** `{formula}`")
+
+            # 7) 예측 & 그래프 (필요시)
+            target = 1_000_000
+            roots = np.roots([a, b, c - target])
+            real_roots = [r.real for r in roots if abs(r.imag) < 1e-6]
+            if real_roots:
+                t_future = max(real_roots)
+                dt_future = base_time + pd.to_timedelta(t_future, unit="s")
+                st.write(f"▶️ 조회수 {target:,}회 돌파 예상 시점: **{dt_future}**")
+
+                ts = pd.date_range(base_time, dt_future, periods=200)
+                xs = (ts - base_time).total_seconds()
+                ys = a*xs**2 + b*xs + c
+
+                fig, ax = plt.subplots(figsize=(8,4))
+                ax.scatter(df["timestamp"], y_all, label="실제 조회수")
+                ax.plot(ts, ys, label="가속 구간 기반 회귀곡선")
+                ax.set_xlabel("시간")
+                ax.set_ylabel("조회수")
+                ax.legend()
+                plt.xticks(rotation=45)
+                st.pyplot(fig)
+            else:
+                st.warning("실근이 없어 1,000,000회 돌파 시점을 예측할 수 없습니다.")
 
 
     elif step==3:
