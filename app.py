@@ -206,75 +206,53 @@ def main_ui():
         if not records:
             st.info("내 기록이 아직 없습니다. 먼저 '1️⃣ 조회수 기록하기'로 기록하세요.")
             return
-        df = pd.DataFrame(records)
+        # (1) 전처리
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         df["viewCount"] = df["viewCount"].astype(int)
-
-        # 기준 시각
-        base_time = df["timestamp"].min()
-        x_all = (df["timestamp"] - base_time).dt.total_seconds().values
+        base = df["timestamp"].min()
+        x_all = (df["timestamp"] - base).dt.total_seconds().values
         y_all = df["viewCount"].values
 
-        # 1) 1차·2차 차분 계산
-        df["diff1"] = df["viewCount"].diff()      # 증가량
-        df["diff2"] = df["diff1"].diff()          # 증가량의 변화
+        # (2) 1차·2차 차분 계산
+        df["diff1"] = df["viewCount"].diff()
+        df["diff2"] = df["diff1"].diff()
 
-        # 2) '증가 & 가속' 마스크
+        # (3) 가속 구간 전체 인덱스 추출
         mask = (df["diff1"] > 0) & (df["diff2"] > 0)
+        acc_idx = df.index[mask]  # [16,17,18,19,20,21,22]
 
-        # 3) 연속 구간 찾기
-        runs = []
-        cur = []
-        for i, ok in enumerate(mask):
-            if ok:
-                cur.append(i)
-            else:
-                if cur:
-                    runs.append(cur)
-                    cur = []
-        if cur:
-            runs.append(cur)
+        # (4) 해당 구간 전체로 2차 회귀
+        x_acc = x_all[acc_idx]
+        y_acc = y_all[acc_idx]
+        a, b, c = np.polyfit(x_acc, y_acc, 2)
 
-        if not runs:
-            st.warning("가속 구간이 없습니다.")
+        # (5) 회귀식 출력
+        formula = f"y = {a:.3e}·x² + {b:.3e}·x + {c:.3e}"
+        st.markdown(f"**가속 구간 전체 기반 2차 회귀식:** `{formula}`")
+
+        # 7) 예측 & 그래프 (필요시)
+        target = 1_000_000
+        roots = np.roots([a, b, c - target])
+        real_roots = [r.real for r in roots if abs(r.imag) < 1e-6]
+        if real_roots:
+            t_future = max(real_roots)
+            dt_future = base_time + pd.to_timedelta(t_future, unit="s")
+            st.write(f"▶️ 조회수 {target:,}회 돌파 예상 시점: **{dt_future}**")
+
+            ts = pd.date_range(base_time, dt_future, periods=200)
+            xs = (ts - base_time).total_seconds()
+            ys = a*xs**2 + b*xs + c
+
+            fig, ax = plt.subplots(figsize=(8,4))
+            ax.scatter(df["timestamp"], y_all, label="실제 조회수")
+            ax.plot(ts, ys, label="가속 구간 기반 회귀곡선")
+            ax.set_xlabel("시간")
+            ax.set_ylabel("조회수")
+            ax.legend()
+            plt.xticks(rotation=45)
+            st.pyplot(fig)
         else:
-           # 4) 가장 길고 안정적인 구간 선택
-            longest = max(runs, key=len)
-            # 5) 그 구간에서 세 점 (시작ㆍ중간ㆍ끝) 인덱스
-            i0 = longest[0]
-            i1 = longest[len(longest)//2]
-            i2 = longest[-1]
-
-            # 6) 회귀
-            x_sel = (df["timestamp"] - base_time).dt.total_seconds().values[[i0, i1, i2]]
-            y_sel = df["viewCount"].values[[i0, i1, i2]]
-            a, b, c = np.polyfit(x_sel, y_sel, 2)
-            formula = f"y = {a:.3e} x² + {b:.3e} x + {c:.3e}"
-            st.markdown(f"**가속 구간 기반 2차 회귀식:** `{formula}`")
-
-            # 7) 예측 & 그래프 (필요시)
-            target = 1_000_000
-            roots = np.roots([a, b, c - target])
-            real_roots = [r.real for r in roots if abs(r.imag) < 1e-6]
-            if real_roots:
-                t_future = max(real_roots)
-                dt_future = base_time + pd.to_timedelta(t_future, unit="s")
-                st.write(f"▶️ 조회수 {target:,}회 돌파 예상 시점: **{dt_future}**")
-
-                ts = pd.date_range(base_time, dt_future, periods=200)
-                xs = (ts - base_time).total_seconds()
-                ys = a*xs**2 + b*xs + c
-
-                fig, ax = plt.subplots(figsize=(8,4))
-                ax.scatter(df["timestamp"], y_all, label="실제 조회수")
-                ax.plot(ts, ys, label="가속 구간 기반 회귀곡선")
-                ax.set_xlabel("시간")
-                ax.set_ylabel("조회수")
-                ax.legend()
-                plt.xticks(rotation=45)
-                st.pyplot(fig)
-            else:
-                st.warning("실근이 없어 1,000,000회 돌파 시점을 예측할 수 없습니다.")
+            st.warning("실근이 없어 1,000,000회 돌파 시점을 예측할 수 없습니다.")
 
 
     elif step==3:
