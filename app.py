@@ -312,34 +312,33 @@ with tab2:
     else:
         st.info("이미 로그인된 상태입니다.")
 
-# 1) 세션에 history, chat_input 초기화
 if "history" not in st.session_state:
     st.session_state["history"] = []
-if "chat_input" not in st.session_state:
-    st.session_state["chat_input"] = ""
 
 st.sidebar.markdown("## 🗨️ AI 챗봇")
-chat_input = st.sidebar.text_input(
-    "질문을 입력하세요", key="chat_input",
-    clear_on_submit=True
-)
+with st.sidebar.form("chat_form", clear_on_submit=True):
+    chat_input = st.text_input("질문을 입력하세요", key="chat_input")
+    submitted = st.form_submit_button("전송")
 
-if st.sidebar.button("전송"):
-    # API 호출 및 히스토리 저장
+if submitted:
+    # 2) API 호출
     messages = [{"role":"system","content":"당신은 친절한 수학 튜터입니다."}]
-    for role, msg in st.session_state.history:
+    # 대화 히스토리도 포함시키려면:
+    for role, msg in st.session_state["history"]:
         messages.append({
-            "role": "user" if role=="🧑‍🎓" else "assistant",
-            "content": msg
+                "role":"user" if role=="🧑‍🎓" else "assistant", 
+                "content":msg
         })
-    messages.append({"role":"user","content":chat_input})
+    messages.append({"role":"user","content": chat_input})
+
     res = openai.chat.completions.create(
         model="gpt-3.5-turbo", messages=messages
     )
     answer = res.choices[0].message.content
 
-    st.session_state.history.append(("🧑‍🎓", chat_input))
-    st.session_state.history.append(("🤖", answer))
+    # 3) 히스토리에 추가
+    st.session_state["history"].append(("🧑‍🎓", chat_input))
+    st.session_state["history"].append(("🤖", answer))
 
     # 5) 대화 내용 보여주기
     for role, msg in st.session_state["history"]:
