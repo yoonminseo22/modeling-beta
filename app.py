@@ -211,7 +211,7 @@ def main_ui():
         if st.button("그래프 보기"):
         # (1) 전처리
             df = pd.DataFrame(records)
-            df["timestamp"] = pd.to_datetime(df["timestamp"])
+            df["timestamp"] = pd.to_datetime(df["timestamp"], infer_datetime_format=True)
             df["viewCount"] = df["viewCount"].astype(int)
             df = df.sort_values("timestamp").reset_index(drop=True)
 
@@ -219,55 +219,62 @@ def main_ui():
             x_all = (df["timestamp"] - base).dt.total_seconds().values
             y_all = df["viewCount"].values
 
-            # 최소 3점 이상인지 체크
-            if len(df) < 3:
-                st.error("데이터가 3개 미만이면 2차 회귀가 불가능합니다.")
-                st.stop()
+            # 2) 1차·2차 차분 계산 (증가량, 증가량의 변화)
+            df["diff1"] = df["viewCount"].diff()
+            df["diff2"] = df["diff1"].diff()
 
-            # 2) 마지막 세 실제 점
-            t0, t1, t2 = x_all[-3], x_all[-2], x_all[-1]
-            y0, y1, y2 = y_all[-3], y_all[-2], y_all[-1]
-            dt = t1 - t0  # 마지막 두 구간이 같은 간격이라 가정
+            # 3) 가속(d2>0)인 인덱스 구하기
+            acc_idx = df.index[(df["diff1"] > 0) & (df["diff2"] > 0)].to_list()
 
-            # 3) 두 구간의 증가율(1차미분)과 가속도(2차미분) 계산
-            s1 = (y1 - y0) / dt
+            # 만약 가속 구간이 2개 이상 존재하면 그곳에서 최초·최종 선택
+            if len(acc_idx) >= 2:
+                i1, i2 = acc_idx[0], acc_idx[-1]
+            else:
+                # fallback: 전체 중 최초·최종
+                i1, i2 = 0, len(df)-1
+
+            # 4) 두 점 사이 Δt, 증가율, 가속도 계산
+            t1, t2 = x_all[i1], x_all[i2]
+            y1, y2 = y_all[i1], y_all[i2]
+            dt = t2 - t1
+            s1 = (y_all[i1] - y_all[max(i1-1,0)]) / (t1 - x_all[max(i1-1,0)]) if i1>0 else (y2-y1)/dt
             s2 = (y2 - y1) / dt
             accel = (s2 - s1) / dt
 
-            # 4) synthetic 점 생성: 동일한 dt 간격을 유지하며 가속도 일정
-            dt3 = dt
-            s3 = s2 + accel * dt3
-            t3 = t2 + dt3
-            y3 = y2 + s3 * dt3
+            # 5) 동일 Δt 후 synthetic 점 생성
+            t3 = t2 + dt
+            s3 = s2 + accel * dt
+            y3 = y2 + s3 * dt
             ts3 = base + pd.to_timedelta(t3, unit="s")
 
-            # 5) 회귀에 사용할 세 점 (t1, t2, synthetic)
-            sel_times = [base + pd.to_timedelta(t1, unit="s"),
-                        base + pd.to_timedelta(t2, unit="s"),
-                        ts3]
-            sel_vals  = [y1, y2, int(y3)]
+            # 6) 회귀에 쓸 세 점
+            sel_times = [
+                base + pd.to_timedelta(t1, unit="s"),
+                base + pd.to_timedelta(t2, unit="s"),
+                ts3,
+            ]
+            sel_vals = [y1, y2, int(y3)]
+
+            # 7) 2차 회귀
             x_sel = np.array([(t - base).total_seconds() for t in sel_times])
             y_sel = np.array(sel_vals)
-
-            # 6) 2차 회귀 수행
             a, b, c = np.polyfit(x_sel, y_sel, 2)
+
             st.markdown(f"**회귀식:** `y = {a:.3e}·x² + {b:.3e}·x + {c:.3e}`")
 
-            # 7) 예측 (1,000,000회 돌파)
+            # 8) 1,000,000회 예측
             roots = np.roots([a, b, c - 1_000_000])
             real_roots = [r.real for r in roots if abs(r.imag) < 1e-6]
             if real_roots:
                 t_pred = max(real_roots)
                 dt_pred = base + pd.to_timedelta(t_pred, unit="s")
-                st.write(f"▶️ 조회수 **1,000,000회** 돌파 예상 시점: **{dt_pred}**")
+                st.write(f"▶️ 1,000,000회 돌파 예상 시점: **{dt_pred}**")
 
-            # (7) 그래프
+            # 9) 시각화
             fig, ax = plt.subplots(figsize=(8,4))
+            ax.scatter(df["timestamp"], y_all, alpha=0.4, label="실제 조회수")
 
-            # 전체 실제 데이터
-            ax.scatter(df["timestamp"], y_all, alpha=0.5, label="실제 조회수")
-
-            # 포물선 회귀곡선
+            # 포물선 곡선
             ts_curve = np.linspace(x_sel.min(), x_sel.max(), 200)
             ax.plot(
                 base + pd.to_timedelta(ts_curve, unit="s"),
@@ -275,20 +282,16 @@ def main_ui():
                 color="orange", label="2차 회귀곡선"
             )
 
-            # 선택된 실제 점 (초록)
-            ax.scatter(sel_times[:2], sel_vals[:2],
-                    color="green", s=80, label="선택된 실제 점")
-            # 합성된 점 (빨강)
-            ax.scatter(ts3, int(y3),
-                    color="red", s=100, label="Synthetic 점")
+            # 선택된 실제 점
+            ax.scatter(sel_times[0], sel_vals[0], color="green", s=40, label="실제 점①")
+            ax.scatter(sel_times[1], sel_vals[1], color="green", s=40, label="실제 점②")
+            # 합성된 점
+            ax.scatter(ts3, int(y3), color="red", s=40, label="Synthetic 점③")
 
-            # ── 여기서 x축 범위 한정 ──
-            start = sel_times[0]                     # 첫 번째 선택된 실제 점 시간
-            end   = ts3                              # 합성된 점 시간
-            pad   = (end - sel_times[0]) * 0.1       # 10% 여유
-            ax.set_xlim(start - pad, end + pad)
+            # → 전체 데이터 영역으로 x축 범위 설정
+            ax.set_xlim(df["timestamp"].min(), df["timestamp"].max())
 
-            # y축 범위도 원하시면 비슷하게 설정
+            # y축은 필요하면 그대로 두거나, 아래처럼 축소
             y_min = min(y_sel.min(), y_all.min()) * 0.9
             y_max = max(y_sel.max(), y_all.max()) * 1.1
             ax.set_ylim(y_min, y_max)
@@ -298,7 +301,7 @@ def main_ui():
             ax.legend()
             plt.xticks(rotation=45)
             st.pyplot(fig)
-            
+
     elif step==3:
         records = [r for r in all_records if str(r["학번"]) == sid]
         df = pd.DataFrame(records)
