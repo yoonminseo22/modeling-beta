@@ -206,55 +206,101 @@ def main_ui():
         if not records:
             st.info("내 기록이 아직 없습니다. 먼저 '1️⃣ 조회수 기록하기'로 기록하세요.")
             return
-        df = pd.DataFrame(records)
+        # 그래프 보기 버튼
+        if st.button("그래프 보기"):
         # (1) 전처리
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
-        df["viewCount"] = df["viewCount"].astype(int)
-        base = df["timestamp"].min()
-        x_all = (df["timestamp"] - base).dt.total_seconds().values
-        y_all = df["viewCount"].values
+            df = pd.DataFrame(records)
+            df["timestamp"] = pd.to_datetime(df["timestamp"])
+            df["viewCount"] = df["viewCount"].astype(int)
+            df = df.sort_values("timestamp").reset_index(drop=True)
 
-        # (2) 1차·2차 차분 계산
-        df["diff1"] = df["viewCount"].diff()
-        df["diff2"] = df["diff1"].diff()
+            base_time = df["timestamp"].min()
+            x = (df["timestamp"] - base_time).dt.total_seconds().values
+            y = df["viewCount"].values
 
-        # (3) 가속 구간 전체 인덱스 추출
-        mask = (df["diff1"] > 0) & (df["diff2"] > 0)
-        acc_idx = df.index[mask]  # [16,17,18,19,20,21,22]
+            # (2) 1차·2차 차분
+            df["diff1"] = df["viewCount"].diff()
+            df["diff2"] = df["diff1"].diff()
 
-        # (4) 해당 구간 전체로 2차 회귀
-        x_acc = x_all[acc_idx]
-        y_acc = y_all[acc_idx]
-        a, b, c = np.polyfit(x_acc, y_acc, 2)
+            # (3) 가속도 차이 최소 3점 조합 탐색
+            best_idx = None
+            min_acc_diff = float("inf")
+            for i, j, k in combinations(range(len(df)), 3):
+                dt1 = x[j] - x[i]
+                dt2 = x[k] - x[j]
+                if dt1 == 0 or dt2 == 0:
+                    continue
+                slope1 = (y[j] - y[i]) / dt1
+                slope2 = (y[k] - y[j]) / dt2
+                acc_diff = abs(slope2 - slope1)
+                if acc_diff < min_acc_diff:
+                    min_acc_diff = acc_diff
+                    best_idx = (i, j, k)
 
-        # (5) 회귀식 출력
-        formula = f"y = {a:.3e}·x² + {b:.3e}·x + {c:.3e}"
-        st.markdown(f"**가속 구간 전체 기반 2차 회귀식:** `{formula}`")
+            # (4) synthetic point 필요 여부 판단
+            threshold = 1e-3
+            i, j, k = best_idx
+            synthetic = None
+            if min_acc_diff > threshold:
+                # 양끝점 i, k 그대로, 중간은 synthetic
+                t_mid = (x[i] + x[k]) / 2
+                slope = (y[k] - y[i]) / (x[k] - x[i])
+                v_mid = y[i] + slope * (t_mid - x[i])
+                synthetic = {"timestamp": base_time + pd.to_timedelta(t_mid, unit="s"),
+                            "viewCount": int(v_mid)}
+                sel_points = [i, "synthetic", k]
+            else:
+                sel_points = [i, j, k]
 
-        # 7) 예측 & 그래프 (필요시)
-        target = 1_000_000
-        roots = np.roots([a, b, c - target])
-        real_roots = [r.real for r in roots if abs(r.imag) < 1e-6]
-        if real_roots:
-            t_future = max(real_roots)
-            dt_future = base_time + pd.to_timedelta(t_future, unit="s")
-            st.write(f"▶️ 조회수 {target:,}회 돌파 예상 시점: **{dt_future}**")
+            # (5) 회귀용 x_sel, y_sel 생성
+            coords = []
+            for idx in sel_points:
+                if idx == "synthetic":
+                    coords.append(synthetic)
+                else:
+                    coords.append({
+                        "timestamp": df.loc[idx, "timestamp"],
+                        "viewCount": int(df.loc[idx, "viewCount"])
+                    })
+            sel_df = pd.DataFrame(coords)
 
-            ts = pd.date_range(base_time, dt_future, periods=200)
-            xs = (ts - base_time).total_seconds()
-            ys = a*xs**2 + b*xs + c
+            x_sel = np.array([(row["timestamp"] - base_time).total_seconds() for _, row in sel_df.iterrows()])
+            y_sel = sel_df["viewCount"].values
 
-            fig, ax = plt.subplots(figsize=(8,4))
-            ax.scatter(df["timestamp"], y_all, label="실제 조회수")
-            ax.plot(ts, ys, label="가속 구간 기반 회귀곡선")
+            # (6) 2차 회귀 및 포물식
+            a, b, c = np.polyfit(x_sel, y_sel, 2)
+            formula = f"y = {a:.3e}·x² + {b:.3e}·x + {c:.3e}"
+            st.markdown(f"**회귀식:** `{formula}`")
+
+            # (7) 100만 돌파 예측
+            roots = np.roots([a, b, c - 1_000_000])
+            real_roots = [r.real for r in roots if abs(r.imag) < 1e-6]
+            if real_roots:
+                t_pred = max(real_roots)
+                dt_pred = base_time + pd.to_timedelta(t_pred, unit="s")
+                st.write(f"▶️ 조회수 1,000,000회 돌파 예상 시점: **{dt_pred}**")
+
+            # (8) 그래프 그리기
+            fig, ax = plt.subplots(figsize=(8, 4))
+            # 실제 데이터
+            ax.scatter(df["timestamp"], y, label="실제 조회수", alpha=0.6)
+            # 회귀 곡선
+            ts_curve = np.linspace(0, max(x) * 1.1, 200)
+            ax.plot(base_time + pd.to_timedelta(ts_curve, unit="s"), a*ts_curve**2 + b*ts_curve + c,
+                    color="orange", label="2차 회귀곡선")
+            # 선택된 실제 점
+            real_idxs = [idx for idx in sel_points if idx != "synthetic"]
+            ax.scatter(df.loc[real_idxs, "timestamp"], df.loc[real_idxs, "viewCount"],
+                    color="green", s=80, label="선택된 실제 점")
+            # synthetic 점
+            if synthetic:
+                ax.scatter(synthetic["timestamp"], synthetic["viewCount"],
+                        color="red", s=80, label="Synthetic 점")
             ax.set_xlabel("시간")
             ax.set_ylabel("조회수")
             ax.legend()
             plt.xticks(rotation=45)
             st.pyplot(fig)
-        else:
-            st.warning("실근이 없어 1,000,000회 돌파 시점을 예측할 수 없습니다.")
-
 
     elif step==3:
         records = [r for r in all_records if str(r["학번"]) == sid]
