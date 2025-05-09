@@ -324,16 +324,69 @@ def main_ui():
         df = pd.DataFrame(records)
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         df["viewCount"]  = df["viewCount"].astype(int)
-        x = (df["timestamp"] - df["timestamp"].min()).dt.total_seconds().values
+        df = df.sort_values("timestamp").reset_index(drop=True)
+
+        base = df["timestamp"].min()
+        x = (df["timestamp"] - base).dt.total_seconds().values
         y = df["viewCount"].values
-        coef = np.polyfit(x, y, 2)
-        st.header("3️⃣ 광고비 모델 추가하기")
-        budget = st.number_input("투입한 광고비를 입력하세요 (원 단위)", step=1000)
-        if st.button("모델에 반영"):
-            # 예: 조회수 = a * sqrt(budget)  이런 모델을 간단히 시연
-            a = coef[0] if len(coef)>0 else 1
-            pred = a * np.sqrt(budget)
-            st.write(f"예상 추가 조회수: {int(pred):,}회")
+
+        # 시간 기반 2차 회귀 계수
+        a, b, c = np.polyfit(x, y, 2)
+        time_poly = np.poly1d([a, b, c])
+
+        st.markdown(f"**시간 모델:**  $y_\\mathrm{{time}}=\\,{a:.3e}x^2 \\,+\\,{b:.3e}x\\,+\\,{c:.3e}$")
+
+        # 2) 광고비 입력
+        budget = st.number_input("투입할 광고비를 입력하세요 (원)", min_value=0, step=1000, value=1000000)
+
+        # 광고비 효과 계수(γ)는 사용자 정의 혹은 과거 데이터로 회귀해서 추정
+        # 여기서는 간단히 γ=0.5 로 설정 (원당 √예산 0.5회 증가)
+        gamma = st.slider("광고비 효과계수 γ 설정", min_value=0.0, max_value=5.0, value=0.5)
+
+        # 3) 통합 예측
+        # - 현재 시점(마지막 데이터)에서의 시간 기반 예측
+        x_now = x[-1]
+        y_time_now = time_poly(x_now)
+
+        # - 광고비 효과
+        y_ad = gamma * np.sqrt(budget)
+
+        # - 합산
+        y_total = int(y_time_now + y_ad)
+
+        st.write(f"▶️ 시간 모델 예측 조회수: **{int(y_time_now):,}회**")
+        st.write(f"▶️ 광고비 효과 조회수: **{int(y_ad):,}회**")
+        st.write(f"▶️ **통합 예측 조회수:** **{y_total:,}회**")
+
+        # 4) 시각화
+        fig, ax = plt.subplots(figsize=(8,4))
+        # 실제 전체 데이터
+        ax.scatter(df["timestamp"], y, color="skyblue", alpha=0.6, s=20, label="실제 조회수")
+
+        # 시간 모델 곡선 (전체 구간)
+        ts_curve = np.linspace(0, x_now, 200)
+        ax.plot(base + pd.to_timedelta(ts_curve, unit="s"),
+                time_poly(ts_curve),
+                color="orange", lw=2, label="시간 모델 곡선")
+
+        # 현재 시점 포인트
+        t_now = base + pd.to_timedelta(x_now, unit="s")
+        ax.scatter(t_now, y_time_now, color="green", s=80, label="시간 모델 예측점")
+
+        # 광고비 효과 후 점
+        ax.scatter(t_now, y_time_now + y_ad, color="red", s=100, label="광고비 적용 예측점")
+
+        # 축 설정
+        ax.set_xlim(df["timestamp"].min(), df["timestamp"].max() + pd.Timedelta(hours=1))
+        ymin = min(y.min(), time_poly(x_now)) * 0.9
+        ymax = (time_poly(x_now) + gamma*np.sqrt(budget)) * 1.1
+        ax.set_ylim(ymin, ymax)
+
+        ax.set_xlabel("시간")
+        ax.set_ylabel("조회수")
+        ax.legend()
+        plt.xticks(rotation=45)
+        st.pyplot(fig)
 
     elif step==4:
         st.header("4️⃣ 토의 내용 입력 & 요약하기")
