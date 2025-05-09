@@ -291,10 +291,12 @@ def main_ui():
             # 전체 데이터
             ax.scatter(df["timestamp"], y_all, color="skyblue", alpha=0.6, s=20, label="전체 실제 데이터")
             # 포물선 곡선
-            ts_curve = np.linspace(x_sel.min(), x_sel.max(), 200)
-            ax.plot(base + pd.to_timedelta(ts_curve, unit="s"),
-                    a*ts_curve**2 + b*ts_curve + c,
-                    color="orange", lw=2, label="2차 회귀곡선")
+            ts_curve = np.linspace(x_all.min(), x_all.max(), 300)
+            ax.plot(
+                base + pd.to_timedelta(ts_curve, unit="s"),
+                a*ts_curve**2 + b*ts_curve + c,
+                color="orange", lw=2, label="2차 회귀곡선 (전체)"
+            )
             # 실제 선택 점
             real_idxs = [idx for idx in sel_idx if idx != "synthetic"]
             ax.scatter(df.loc[real_idxs, "timestamp"], df.loc[real_idxs, "viewCount"],
