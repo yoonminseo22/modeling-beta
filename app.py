@@ -387,6 +387,43 @@ def main_ui():
         plt.xticks(rotation=45)
         st.pyplot(fig)
 
+        if st.button("적합도 평가 & 요약 저장"):
+            # 1) MAE, RMSE 계산
+            y_pred_full = time_poly(x_all) + gamma * np.sqrt(budget)
+            mae  = np.mean(np.abs(y_all - y_pred_full))
+            rmse = np.sqrt(np.mean((y_all - y_pred_full)**2))
+            st.write(f"**평균절대오차(MAE):** {mae:,.2f}")
+
+        # 10) 요약하기
+        if st.button("의견 요약 & 시트 저장"):
+            # 학생 의견 수집
+            opinions = [
+                rec["opinion"]
+                for rec in all_records
+                if rec.get("step") == 3 and rec.get("opinion")
+            ]
+            if not opinions:
+                st.warning("의견이 없습니다.")
+            else:
+                # GPT 요약
+                prompt = "아래 학생 의견을 요약해 주세요:\n\n" + "\n".join(f"- {o}" for o in opinions)
+                resp = openai.ChatCompletion.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": "수업 토의 내용을 간결하게 요약하세요."},
+                        {"role": "user",   "content": prompt}
+                    ]
+                )
+                summary = resp.choices[0].message.content
+                st.markdown("**요약:** " + summary)
+
+                # 스프레드시트 기록
+                ss = gc.open_by_key(yt_conf["spreadsheet_id"])
+                ds = ss.worksheet("적합도평가")  # 미리 만들어두세요
+                timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                ds.append_row([session, timestamp, raw, summary])
+                st.info("스프레드시트에 저장되었습니다.")
+
     elif step==4:
         st.header("4️⃣ 토의 내용 입력 & 요약하기")
 
