@@ -12,6 +12,7 @@ from matplotlib import font_manager as fm, rcParams
 from datetime import datetime
 import os
 from oauth2client.service_account import ServiceAccountCredentials
+from itertools import combinations
 
 openai.api_key = st.secrets["openai"]["api_key"]
 
