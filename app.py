@@ -395,50 +395,41 @@ def main_ui():
             st.write(f"**평균절대오차(MAE):** {mae:,.2f}")
 
         # ── 0) 학생 의견 입력란 추가 ──
-        st.subheader("💬 적합도 평가에 대한 의견을 남겨주세요")
+        st.subheader("💬 적합도 평가 의견 남기기")
         opinion_input = st.text_area(
-            "모델 예측 결과와 실제 조회수의 차이에 대해 느낀 점이나 개선할 점을 자유롭게 적어주세요.",
-            height=100,
-            placeholder="예) 저는 예측 모델이 너무 보수적이라 아쉬웠습니다…"
+            "모델 예측 결과와 실제 조회수의 차이에 대해 느낀 점이나 개선할 점을 적어주세요.",
+            height=120,
+            placeholder="예) 저는 예측 모델이 너무 보수적이라고 느꼈습니다…"
         )
-        if st.button("의견 제출"):
-            # all_records 는 세션 내에 유지되는 리스트라고 가정
-            all_records.append({
-                "step": 3,
-                "학번": sid,
-                "opinion": opinion_input
-            })
-            st.success("의견이 기록되었습니다!")
 
-        # 10) 요약하기
-        if st.button("의견 요약 & 시트 저장"):
-            # 학생 의견 수집
-            opinions = [
-                rec["opinion"]
-                for rec in all_records
-                if rec.get("step") == 3 and rec.get("opinion")
-            ]
-            if not opinions:
-                st.warning("의견이 없습니다.")
+        # 하나의 버튼으로 제출 → 요약 → 시트 저장
+        if st.button("의견 제출 및 요약 저장"):
+            if not opinion_input.strip():
+                st.warning("먼저 의견을 입력해 주세요.")
             else:
-                # GPT 요약
-                prompt = "아래 학생 의견을 요약해 주세요:\n\n" + "\n".join(f"- {o}" for o in opinions)
+                # 1) GPT 요약
+                prompt = (
+                    "다음 학생 의견을 간결하게 요약해 주세요:\n\n"
+                    f"{opinion_input}"
+                )
                 resp = openai.ChatCompletion.create(
                     model="gpt-3.5-turbo",
                     messages=[
-                        {"role": "system", "content": "수업 토의 내용을 간결하게 요약하세요."},
+                        {"role": "system", "content": "당신은 수업 토의 내용을 간결히 요약하는 AI입니다."},
                         {"role": "user",   "content": prompt}
                     ]
                 )
                 summary = resp.choices[0].message.content
-                st.markdown("**요약:** " + summary)
+                st.markdown("**요약:**  " + summary)
 
-                # 스프레드시트 기록
+                # 2) 스프레드시트에 기록
                 ss = gc.open_by_key(yt_conf["spreadsheet_id"])
-                ds = ss.worksheet("적합도평가")  # 미리 만들어두세요
+                ws = ss.worksheet("적합도평가")  # 시트 이름 확인
                 timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-                ds.append_row([session, timestamp, raw, summary])
-                st.info("스프레드시트에 저장되었습니다.")
+                # [세션, 타임스탬프, 원문 의견, 요약]
+                ws.append_row([session, timestamp, opinion_input, summary])
+
+                st.success("의견과 요약이 시트에 저장되었습니다!")
 
     elif step==4:
         st.header("4️⃣ 토의 내용 입력 & 요약하기")
