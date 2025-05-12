@@ -13,7 +13,6 @@ from datetime import datetime
 import os
 from oauth2client.service_account import ServiceAccountCredentials
 from itertools import combinations
-from apscheduler.schedulers.background import BackgroundScheduler
 
 openai.api_key = st.secrets["openai"]["api_key"]
 
@@ -182,28 +181,6 @@ def main_ui():
     
     all_records = yt_sheet.get_all_records()
     records = [r for r in all_records if str(r["학번"]) == sid]
-
-    def update_video_stats_job():
-    # 시트에 있는 모든 (학번, video_id) 쌍을 한 번씩만 돌면서
-        rows = yt_sheet.get_all_records()
-        unique_pairs = {(r["학번"], r["video_id"]) for r in rows}
-        for sid, vid in unique_pairs:
-            stats = get_video_statistics(vid)
-            if stats:
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                yt_sheet.append_row([
-                    sid, vid, timestamp,
-                    stats["viewCount"], stats["likeCount"], stats["commentCount"]
-                ])
-
-    # --- (3) Streamlit 앱이 시작될 때 한 번만 스케줄러를 띄우도록 ---
-    if "scheduler_initialized" not in st.session_state:
-        scheduler = BackgroundScheduler()
-        # 3시간 간격으로
-        scheduler.add_job(update_video_stats_job, "interval", hours=3)
-        scheduler.start()
-        st.session_state["scheduler_initialized"] = True
-
 
     if step==1:
         st.header("1️⃣ 유튜브 조회수 기록하기")
