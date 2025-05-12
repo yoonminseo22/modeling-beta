@@ -8,4 +8,4 @@ matplotlib
 gspread
 oauth2client
 openai
-APScheduler
+APScheduler>=3.10
