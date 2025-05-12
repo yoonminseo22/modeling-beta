@@ -412,7 +412,7 @@ def main_ui():
                     "다음 학생 의견을 간결하게 요약해 주세요:\n\n"
                     f"{opinion_input}"
                 )
-                resp = openai.ChatCompletion.create(
+                resp = openai.chat.completions.create(
                     model="gpt-3.5-turbo",
                     messages=[
                         {"role": "system", "content": "당신은 수업 토의 내용을 간결히 요약하는 AI입니다."},
