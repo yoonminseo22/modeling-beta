@@ -394,6 +394,23 @@ def main_ui():
             rmse = np.sqrt(np.mean((y - y_pred_full)**2))
             st.write(f"**평균절대오차(MAE):** {mae:,.2f}")
 
+            mean_views = y.mean()
+            mae_ratio = mae / mean_views * 100  # MAE가 전체 평균의 몇 %인지
+            st.write(f"📊 MAE/평균 조회수 비율: {mae_ratio:.2f}%")
+
+            data_range = y.max() - y.min()
+            mae_range = mae / data_range * 100
+            st.write(f"📊 MAE/범위 비율: {mae_range:.2f}%")
+
+            mape = np.mean(np.abs((y - y_pred_full) / y)) * 100
+            st.write(f"📊 평균절대백분율오차(MAPE): {mape:.2f}%")
+
+            residuals = y - y_pred_full
+            fig, ax = plt.subplots()
+            ax.scatter(df["timestamp"], residuals)
+            ax.axhline(0, color='gray', linestyle='--')
+            st.pyplot(fig)
+
         # ── 0) 학생 의견 입력란 추가 ──
         st.subheader("💬 적합도 평가 의견 남기기")
         session = st.selectbox("조를 선택하세요", ["A조","B조","C조"], key="session")
