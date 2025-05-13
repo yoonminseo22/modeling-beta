@@ -392,7 +392,10 @@ def main_ui():
             y_pred_full = time_poly(x) + gamma * np.sqrt(budget)
             mae  = np.mean(np.abs(y - y_pred_full))
             rmse = np.sqrt(np.mean((y - y_pred_full)**2))
+            mse = np.mean((y - y_pred_full)**2)
             st.write(f"**평균절대오차(MAE):** {mae:,.2f}")
+            st.write(f"**제곱근평균제곱오차(RMSE):** {rmse:,.2f}")
+            st.write(f"**평균제곱오차(MSE):** {mse:,.2f}")
 
             mean_views = y.mean()
             mae_ratio = mae / mean_views * 100  # MAE가 전체 평균의 몇 %인지
