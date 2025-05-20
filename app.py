@@ -564,7 +564,7 @@ with tab1:
                     if pw == st.secrets["teacher"]["access_pw"]:   # ★ secrets.toml에 저장
                         st.session_state["teacher_auth"] = True
                         st.sidebar.success("교사 인증 완료!")
-                        st.experimental_rerun()    # 페이지 새로 고침
+                        st.rerun()    # 페이지 새로 고침
                     else:
                         st.sidebar.error("비밀번호가 틀립니다.")
                 st.stop()   # 비밀번호 맞을 때까지 teacher_ui 실행 차단
