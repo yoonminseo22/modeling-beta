@@ -2,21 +2,19 @@
 import openai
 import streamlit as st
 import gspread
-import requests
-import hashlib
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib import font_manager as fm, rcParams
-from datetime import datetime
-import os
+from datetime import datetime, timezone
+from typing import Dict, Any, List, Tuple
+import os, time, json, math, textwrap, hashlib, requests
 from oauth2client.service_account import ServiceAccountCredentials
 from itertools import combinations
 
+# 기본 설정
 openai.api_key = st.secrets["openai"]["api_key"]
-
-# 폰트 설정
 font_path = os.path.join("fonts", "NanumGothic.ttf")
 fm.fontManager.addfont(font_path)
 prop = fm.FontProperties(fname=font_path)
@@ -54,6 +52,61 @@ yt_sheet  = yt_wb.worksheet(yt_conf["sheet_name"])
 usr_wb    = gc.open_by_key(usr_conf["spreadsheet_id"])
 usr_sheet = usr_wb.worksheet(usr_conf["sheet_name"])
 
+# ── Sheets 도우미 (429 백오프) ───────────────────────────────────────────────
+
+def safe_append(ws, row: List[Any]):
+    """429 대응 append_row."""
+    for wait in (0, 2, 4, 8, 16):
+        try:
+            ws.append_row(row, value_input_option="USER_ENTERED")
+            return
+        except gspread.exceptions.APIError as e:
+            if e.response.status == 429:
+                time.sleep(wait)
+            else:
+                raise
+    st.error("❌ Google Sheets 쿼터 초과 – 잠시 후 다시 시도하세요.")
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_records(ws):
+    return ws.get_all_records()
+
+VIDEO_CRITERIA = {"max_views":1_000_000, "min_subs":1_000, "max_subs":3_000_000}
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_video_details(vid: str) -> Dict[str,Any] | None:
+    url = ("https://www.googleapis.com/youtube/v3/videos"
+           f"?part=snippet,statistics&id={vid}&key={YOUTUBE_API_KEY}")
+    data = requests.get(url).json()
+    if not data.get("items"):
+        return None
+    item = data["items"][0]
+    stats = item["statistics"]
+    snippet = item["snippet"]
+    # 채널 구독자
+    chan = requests.get("https://www.googleapis.com/youtube/v3/channels"
+                        f"?part=statistics&id={snippet['channelId']}&key={YOUTUBE_API_KEY}").json()
+    subs = int(chan["items"][0]["statistics"].get("subscriberCount",0))
+    return {
+        "title" : snippet["title"],
+        "pub"   : snippet["publishedAt"][:10],
+        "views" : int(stats.get("viewCount",0)),
+        "subs"  : subs,
+    }
+
+def extract_video_id(url:str):
+    import re
+    m = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", url)
+    return m.group(1) if m else None
+
+# ── 공통 UI 컴포넌트 ────────────────────────────────────────────────────────
+
+def step_header(title:str, goal:str, qs:List[str]):
+    st.markdown(f"### {title}")
+    st.info(f"**차시 목표** – {goal}")
+    with st.expander("💡 핵심 발문"):
+        st.markdown("\n".join([f"- {q}" for q in qs]))
+
 # 해시 함수
 def hash_password(pw: str) -> str:
     if not isinstance(pw, str) or pw == "":
@@ -79,7 +132,8 @@ def signup_ui():
         if any(r["학번"] == sid for r in rows):
             st.error("이미 등록된 학번입니다.")
         else:
-            usr_sheet.append_row([sid, name, pw_hash])
+            safe_append(usr_sheet, [sid, name, pw_hash])
+
             st.success(f"{name}님, 회원가입이 완료되었습니다!")
 
 # 로그인 UI
@@ -116,12 +170,6 @@ def login_ui():
         st.success(f"🎉 환영합니다, {user['이름']}님!")
         st.rerun()
         return
-
-# 유튜브 영상 ID 추출
-def extract_video_id(url):
-    import re
-    m = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", url)
-    return m.group(1) if m else None
 
 # 조회수 API 호출
 def get_video_statistics(video_id):
@@ -183,27 +231,31 @@ def main_ui():
     records = [r for r in all_records if str(r["학번"]) == sid]
 
     if step==1:
-        st.header("1️⃣ 유튜브 조회수 기록하기")
+        step_header("1️⃣ 유튜브 조회수 기록하기", "실생활 데이터로 모델링 시작하기",
+                    ["어떤 조건으로 영상을 선택해야 할까?", "조회수·구독자 수와 모델 품질은 어떤 관련이 있을까?"])
         yt_url = st.text_input("유튜브 링크를 입력하세요")
-        if st.button("조회수 기록"):
+        if st.button("조건 검증 및 조회수 기록"):
             vid = extract_video_id(yt_url)
             if not vid:
-                st.error("⛔ 유효한 유튜브 링크가 아닙니다.")
-            else:
-                stats = get_video_statistics(vid)
-                if not stats:
-                    st.error("😢 영상 정보를 불러올 수 없습니다.")
-                else:
-                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    # ['학번','video_id','timestamp','viewCount','likeCount','commentCount']
-                    yt_sheet.append_row([
-                        user["학번"], vid, timestamp,
-                        stats["viewCount"], stats["likeCount"], stats["commentCount"]
-                    ])
-                    st.success("✅ 기록 완료")
+                st.error("⛔ 유효한 유튜브 링크가 아닙니다."); return
+            info = fetch_video_details(vid)
+            if not info:
+                st.error("영상 정보를 가져올 수 없습니다."); return
+            valid = (info['views']<VIDEO_CRITERIA['max_views'] and
+                      VIDEO_CRITERIA['min_subs']<=info['subs']<=VIDEO_CRITERIA['max_subs'])
+            st.write(info)
+            if not valid:
+                st.warning("조건을 만족하지 않습니다. 다른 영상을 선택하세요."); return
+            # ['학번','video_id','timestamp','viewCount','likeCount','commentCount']
+            stats = {k:info[k] for k in ('views',)}  # views만 사용
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            safe_append(yt_sheet, [sid, vid, ts, stats['views']])
+            st.success("✅ 기록 완료")
 
     elif step==2:
-        st.header("2️⃣ 유튜브 조회수 분석하기")
+        step_header("2️⃣ 유튜브 조회수 이차 회귀 분석하기",
+                    "선택한 데이터로 모델 적합 및 100만 예측",
+                    ["왜 선형이 아닌 이차함수일까?", "모델이 잘 맞는지 어떻게 판단할까?"])
         if not records:
             st.info("내 기록이 아직 없습니다. 먼저 '1️⃣ 조회수 기록하기'로 기록하세요.")
             return
@@ -211,7 +263,7 @@ def main_ui():
         if st.button("그래프 보기"):
         # (1) 전처리
             df = pd.DataFrame(records)
-            df["timestamp"] = pd.to_datetime(df["timestamp"], infer_datetime_format=True)
+            df["timestamp"] = pd.to_datetime(df["timestamp"], pd.to_datetime(df["timestamp"]))
             df["viewCount"] = df["viewCount"].astype(int)
             df = df.sort_values("timestamp").reset_index(drop=True)
 
@@ -320,6 +372,9 @@ def main_ui():
             st.pyplot(fig)
 
     elif step==3:
+        step_header("▶️ γ(광고효과) 시뮬레이션",
+                "모델을 확장하여 마케팅 변수 고려하기",
+                ["γ 값은 어떻게 해석할까?", "광고비가 효율적일 조건은?"])
         df = pd.DataFrame(records)
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         df["viewCount"]  = df["viewCount"].astype(int)
@@ -338,6 +393,11 @@ def main_ui():
         # 2) 광고비 입력
         budget = st.number_input("투입할 광고비를 입력하세요 (원)", min_value=0, step=1000, value=1000000)
 
+        with st.expander("📖 γ(감마) 계수란?"):
+            st.markdown("""* **정의** : 광고 투자가 조회수 증가율에 주는 가속효과를 나타내는 상수입니다.\
+* **모형** : `views = base_views + γ·√budget`\
+* **교육적 해석** : √예산 형태는 체감효용을 단순화하여, '투자 대비 증가율 감소' 개념을 포물선과 연결해 보여줍니다.""")
+            
         # 광고비 효과 계수(γ)는 사용자 정의 혹은 과거 데이터로 회귀해서 추정
         # 여기서는 간단히 γ=0.5 로 설정 (원당 √예산 0.5회 증가)
         gamma = st.slider("광고비 효과계수 γ 설정", min_value=0.0, max_value=5.0, value=0.5)
@@ -479,13 +539,37 @@ def main_ui():
             ds.append_row([session, timestamp, raw, summary])
             st.info("스프레드시트에 저장되었습니다.")
 
+def teacher_ui():
+    st.title("🧑‍🏫 교사용 대시보드")
+    df = pd.DataFrame(load_records(yt_sheet), columns=["학번","video_id","timestamp","viewCount"])
+    if df.empty:
+        st.info("데이터가 없습니다."); return
+    st.metric("제출 건수", len(df))
+    st.metric("평균 조회수", int(df["viewCount"].mean()))
+    st.dataframe(df.tail(20))
+
 # === 메인 탭 구조 ===
 tab1, tab2 = st.tabs(["로그인", "회원가입"])
 with tab1:
     if not st.session_state["logged_in"]:
         login_ui()
     else:
-        main_ui()
+        MODE = st.sidebar.radio("모드 선택", ["학생용 페이지", "교사용 페이지"])
+        if MODE == "학생용 페이지":
+            main_ui()
+        else:
+            if not st.session_state.get("teacher_auth", False):
+                pw = st.sidebar.text_input("교사 비밀번호를 입력하세요", type="password")
+                if st.sidebar.button("확인"):
+                    if pw == st.secrets["teacher"]["access_pw"]:   # ★ secrets.toml에 저장
+                        st.session_state["teacher_auth"] = True
+                        st.sidebar.success("교사 인증 완료!")
+                        st.experimental_rerun()    # 페이지 새로 고침
+                    else:
+                        st.sidebar.error("비밀번호가 틀립니다.")
+                st.stop()   # 비밀번호 맞을 때까지 teacher_ui 실행 차단
+            # ② 인증 완료 → 교사용 대시보드
+            teacher_ui()
 with tab2:
     if not st.session_state["logged_in"]:
         signup_ui()
