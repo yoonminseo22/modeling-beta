@@ -68,8 +68,8 @@ def safe_append(ws, row: List[Any]):
     st.error("❌ Google Sheets 쿼터 초과 – 잠시 후 다시 시도하세요.")
 
 @st.cache_data(ttl=300, show_spinner=False)
-def load_records(ws):
-    return ws.get_all_records()
+def load_records(_ws):
+    return _ws.get_all_records()
 
 VIDEO_CRITERIA = {"max_views":1_000_000, "min_subs":1_000, "max_subs":3_000_000}
 
