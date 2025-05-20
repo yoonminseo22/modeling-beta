@@ -128,7 +128,7 @@ def signup_ui():
         if pw_hash == "":
             st.error("비밀번호 처리에 문제가 발생했습니다.")
             return
-        rows = usr_sheet.get_all_records()
+        rows = load_records(usr_sheet)
         if any(r["학번"] == sid for r in rows):
             st.error("이미 등록된 학번입니다.")
         else:
@@ -139,7 +139,7 @@ def signup_ui():
 # 로그인 UI
 def login_ui():
     st.header("🔐 로그인")
-    rows = usr_sheet.get_all_records()
+    rows = load_records(usr_sheet)
     sid = st.text_input("학번", key="login_sid")
     pwd = st.text_input("비밀번호", type="password", key="login_pwd")
 
@@ -227,7 +227,7 @@ def main_ui():
     st.info(f"현재  {step}번째 활동 중")
 
     
-    all_records = yt_sheet.get_all_records()
+    all_records = load_records(yt_sheet)
     records = [r for r in all_records if str(r["학번"]) == sid]
 
     if step==1:
