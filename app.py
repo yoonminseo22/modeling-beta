@@ -224,7 +224,7 @@ def main_ui():
         st.session_state['step']+=1
         st.rerun()
     step=st.session_state['step']
-    st.info(f"현재  {step}차시 활동 중")
+    st.info(f"현재  {step}번째 활동 중")
 
     
     all_records = yt_sheet.get_all_records()
@@ -232,7 +232,7 @@ def main_ui():
 
     if step==1:
         step_header("1️⃣ 유튜브 조회수 기록하기", "실생활 데이터로 모델링 시작하기",
-                    ["어떤 조건으로 영상을 선택해야 할까?", "조회수·구독자 수와 모델 품질은 어떤 관련이 있을까?"])
+                    ["수학적 모델링은 무엇일까?", "왜 직선이 아닌 곡선을 선택할까?", "어떤 조건으로 영상을 선택해야 할까?", "조회수 기록 시 날짜, 시간 같은 단위를 빼먹으면 어떤 문제가 생길까?"])
         yt_url = st.text_input("유튜브 링크를 입력하세요")
         if st.button("조건 검증 및 조회수 기록"):
             vid = extract_video_id(yt_url)
@@ -253,9 +253,9 @@ def main_ui():
             st.success("✅ 기록 완료")
 
     elif step==2:
-        step_header("2️⃣ 유튜브 조회수 이차 회귀 분석하기",
-                    "선택한 데이터로 모델 적합 및 100만 예측",
-                    ["왜 선형이 아닌 이차함수일까?", "모델이 잘 맞는지 어떻게 판단할까?"])
+        step_header("2️⃣-1️⃣ 유튜브 조회수 이차 회귀 분석하기",
+                    "선택한 데이터로 모델 적합 및 100만 예측하기기",
+                    ["이차함수의 a, b, c의 값은 그래프에 어떤 영향을 줄까?", "모델이 잘 맞는지 어떻게 판단할까?", "정말 이차함수의 그래프가 데이터 경향을 잘 설명해줄까?"])
         if not records:
             st.info("내 기록이 아직 없습니다. 먼저 '1️⃣ 조회수 기록하기'로 기록하세요.")
             return
@@ -372,9 +372,9 @@ def main_ui():
             st.pyplot(fig)
 
     elif step==3:
-        step_header("▶️ γ(광고효과) 시뮬레이션",
+        step_header("2️⃣-2️⃣ γ(광고효과) 시뮬레이션",
                 "모델을 확장하여 마케팅 변수 고려하기",
-                ["γ 값은 어떻게 해석할까?", "광고비가 효율적일 조건은?"])
+                ["γ 값은 어떻게 해석할까?", "만약 광고비를 두 배로 늘린다면?", "광고비가 효율적일 조건은?"])
         df = pd.DataFrame(records)
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         df["viewCount"]  = df["viewCount"].astype(int)
@@ -476,7 +476,22 @@ def main_ui():
 
         # ── 0) 학생 의견 입력란 추가 ──
         st.subheader("💬 적합도 평가 의견 남기기")
-        session = st.selectbox("조를 선택하세요", ["A조","B조","C조"], key="session")
+                # ── 반 선택 ─────────────────────────────────────────
+        cls = st.selectbox(
+            "반을 선택하세요",              # 라벨
+            [f"{i}반" for i in range(1, 7)],  # 1~6반
+            key="class_select"
+        )
+
+        # ── 조 선택 ─────────────────────────────────────────
+        team = st.selectbox(
+            "조를 선택하세요",
+            [f"{c}조" for c in "ABCD"],        # A~D조
+            key="team_select"
+        )
+
+        st.write(f"선택 결과 → {cls} {team}")
+        session = f"{cls}-{team}"
 
         opinion_input = st.text_area(
             "모델 예측 결과와 실제 조회수의 차이에 대해 느낀 점이나 개선할 점을 적어주세요.",
@@ -514,10 +529,25 @@ def main_ui():
                 st.success("의견과 요약이 시트에 저장되었습니다!")
 
     elif step==4:
-        st.header("4️⃣ 토의 내용 입력 & 요약하기")
+        step_header("3️⃣ 토의 내용 입력 & 요약하기",
+                "프로젝트를 정리하고 수학적 모델링의 가치 확인하기",
+                ["우리가 만든 모델의 장점과 한계는 무엇일까?", "썸네일, 알고리즘 같은 바이럴 요소를 어떻게 반영할까?", "프로젝트 진행 시 수학이 결정을 도와준 순간은 언제였을까?"])
+                # ── 반 선택 ─────────────────────────────────────────
+        cls = st.selectbox(
+            "반을 선택하세요",              # 라벨
+            [f"{i}반" for i in range(1, 7)],  # 1~6반
+            key="class_select"
+        )
 
-        # 4차시 세션 구분 (예: A조, B조 등)
-        session = st.selectbox("조를 선택하세요", ["A조","B조","C조"], key="session")
+        # ── 조 선택 ─────────────────────────────────────────
+        team = st.selectbox(
+            "조를 선택하세요",
+            [f"{c}조" for c in "ABCD"],        # A~D조
+            key="team_select"
+        )
+
+        st.write(f"선택 결과 → {cls} {team}")
+        session = f"{cls}-{team}"
 
         # 토의 내용 입력
         raw = st.text_area("토의 내용을 입력하세요", key="discussion_raw", height=200)
