@@ -132,7 +132,8 @@ def signup_ui():
         if any(r["학번"] == sid for r in rows):
             st.error("이미 등록된 학번입니다.")
         else:
-            safe_append(usr_sheet, [sid, name, pw_hash])
+            sid_text=f"'{sid}"
+            safe_append(usr_sheet, [sid_text, name, pw_hash])
 
             st.success(f"{name}님, 회원가입이 완료되었습니다!")
 
