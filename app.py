@@ -264,6 +264,7 @@ def main_ui():
         if st.button("그래프 보기"):
         # (1) 전처리
             df = pd.DataFrame(records)
+            df.columns = df.columns.str.strip()   # ← 한 줄 추가
             df["timestamp"] = pd.to_datetime(df["timestamp"])
             df["viewCount"] = df["viewCount"].astype(int)
             df = df.sort_values("timestamp").reset_index(drop=True)
