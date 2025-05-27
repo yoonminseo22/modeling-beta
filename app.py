@@ -142,7 +142,7 @@ def signup_ui():
 # 로그인 UI
 def login_ui():
     st.header("🔐 로그인")
-    rows = load_records(usr_sheet)
+    rows = load_youtube_records(usr_wb, usr_sheet)
     sid = st.text_input("학번", key="login_sid")
     pwd = st.text_input("비밀번호", type="password", key="login_pwd")
 
@@ -230,7 +230,7 @@ def main_ui():
     st.info(f"현재  {step}번째 활동 중")
 
     
-    all_records = load_records(yt_sheet)
+    all_records = load_youtube_records(yt_wb, yt_sheet)
     records = [r for r in all_records if str(r["학번"]) == sid]
 
     if step==1:
