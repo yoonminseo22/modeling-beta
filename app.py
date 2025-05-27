@@ -68,9 +68,9 @@ def safe_append(ws, row: List[Any]):
     st.error("❌ Google Sheets 쿼터 초과 – 잠시 후 다시 시도하세요.")
 
 @st.cache_data(ttl=300, show_spinner=False)
-def load_youtube_records(spreadsheet_id: str, sheet_name: str) -> list:
+def load_youtube_records(_spreadsheet_id: str, sheet_name: str) -> list:
     """유튜브 기록을 5분간 캐싱하여 호출 횟수 최소화."""
-    ws = gc.open_by_key(spreadsheet_id).worksheet(sheet_name)
+    ws = gc.open_by_key(_spreadsheet_id).worksheet(sheet_name)
     return ws.get_all_records()
 
 VIDEO_CRITERIA = {"max_views":1_000_000, "min_subs":1_000, "max_subs":3_000_000}
@@ -231,7 +231,7 @@ def main_ui():
 
     
     all_records = load_youtube_records(yt_wb, yt_sheet)
-    records = [r for r in all_records if str(r["학번"]) == sid]
+    records = [r for r in all_records if str(r.get('학번','')) == sid]
 
     if step==1:
         step_header("1️⃣ 유튜브 조회수 기록하기", "실생활 데이터로 이차함수 회귀 분석 시작하기",
