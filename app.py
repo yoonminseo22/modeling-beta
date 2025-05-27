@@ -68,8 +68,10 @@ def safe_append(ws, row: List[Any]):
     st.error("❌ Google Sheets 쿼터 초과 – 잠시 후 다시 시도하세요.")
 
 @st.cache_data(ttl=300, show_spinner=False)
-def load_records(_ws):
-    return _ws.get_all_records()
+def load_youtube_records(spreadsheet_id: str, sheet_name: str) -> list:
+    """유튜브 기록을 5분간 캐싱하여 호출 횟수 최소화."""
+    ws = gc.open_by_key(spreadsheet_id).worksheet(sheet_name)
+    return ws.get_all_records()
 
 VIDEO_CRITERIA = {"max_views":1_000_000, "min_subs":1_000, "max_subs":3_000_000}
 
@@ -232,8 +234,8 @@ def main_ui():
     records = [r for r in all_records if str(r["학번"]) == sid]
 
     if step==1:
-        step_header("1️⃣ 유튜브 조회수 기록하기", "실생활 데이터로 모델링 시작하기",
-                    ["수학적 모델링은 무엇일까?", "왜 직선이 아닌 곡선을 선택할까?", "어떤 조건으로 영상을 선택해야 할까?", "조회수 기록 시 날짜, 시간 같은 단위를 빼먹으면 어떤 문제가 생길까?"])
+        step_header("1️⃣ 유튜브 조회수 기록하기", "실생활 데이터로 이차함수 회귀 분석 시작하기",
+                    ["회귀분석이란 무엇일까?", "왜 직선이 아닌 곡선으로 예측을 할까?", "어떤 조건으로 영상을 선택해야 할까?"])
         yt_url = st.text_input("유튜브 링크를 입력하세요")
         if st.button("조건 검증 및 조회수 기록"):
             vid = extract_video_id(yt_url)
@@ -255,229 +257,108 @@ def main_ui():
 
     elif step==2:
         step_header("2️⃣-1️⃣ 유튜브 조회수 이차 회귀 분석하기",
-                    "선택한 데이터로 모델 적합 및 100만 예측하기기",
+                    "선택한 데이터로 모델 적합 및 100만 예측하기",
                     ["이차함수의 a, b, c의 값은 그래프에 어떤 영향을 줄까?", "모델이 잘 맞는지 어떻게 판단할까?", "정말 이차함수의 그래프가 데이터 경향을 잘 설명해줄까?"])
         if not records:
             st.info("내 기록이 아직 없습니다. 먼저 '1️⃣ 조회수 기록하기'로 기록하세요.")
             return
         # 그래프 보기 버튼
-        if st.button("그래프 보기"):
-        # (1) 전처리
+        if st.button("회귀 분석하기"):
             df = pd.DataFrame(records)
-            df.columns = df.columns.str.strip()   # ← 한 줄 추가
-            df["timestamp"] = pd.to_datetime(df["timestamp"])
-            df["viewCount"] = df["viewCount"].astype(int)
-            df = df.sort_values("timestamp").reset_index(drop=True)
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            df['viewCount'] = df['viewCount'].astype(int)
+            df = df.sort_values('timestamp').reset_index(drop=True)
+            base = df['timestamp'].min()
+            x = (df['timestamp'] - base).dt.total_seconds().values
+            y = df['viewCount'].values
 
-            base = df["timestamp"].min()
-            x_all = (df["timestamp"] - base).dt.total_seconds().values
-            y_all = df["viewCount"].values
-
-            # 2) 가능한 3점 조합 중 'a>0' & f' >0 on interval' 조건 만족 조합 찾기
+            # 최적 세 점 선택
             candidates = []
             for i, j, k in combinations(range(len(df)), 3):
-                xi = x_all[[i, j, k]]
-                yi = y_all[[i, j, k]]
-                a_coef, b_coef, _ = np.polyfit(xi, yi, 2)
-
-                # concave up
-                if a_coef <= 0:
+                xi, yi = x[[i, j, k]], y[[i, j, k]]
+                a, b, c = np.polyfit(xi, yi, 2)
+                if a <= 0 or (2*a*xi[0] + b) <= 0 or (2*a*xi[2] + b) <= 0:
                     continue
-
-                # derivative positive at i and k
-                deriv_i = 2 * a_coef * xi[0] + b_coef
-                deriv_k = 2 * a_coef * xi[2] + b_coef
-                if deriv_i <= 0 or deriv_k <= 0:
-                    continue
-
-                # fit error
-                y_pred = a_coef*xi**2 + b_coef*xi + _
-                mse = np.mean((yi - y_pred)**2)
+                mse = np.mean((yi - (a*xi**2 + b*xi + c))**2)
                 candidates.append((mse, (i, j, k)))
+            idxs = min(candidates, key=lambda v: v[0])[1] if candidates else list(range(min(3, len(df))))
+            sel = df.loc[list(idxs)]
+            a, b, c = np.polyfit((sel['timestamp'] - base).dt.total_seconds(), sel['viewCount'], 2)
 
-            if candidates:
-                # best triple by lowest MSE
-                _, (i1, i2, i3) = min(candidates, key=lambda x: x[0])
-                synthetic = None
-                sel_idx = [i1, i2, i3]
-            else:
-                # fallback: last two + synthetic
-                i1, i2 = len(df)-2, len(df)-1
-                dt = x_all[i2] - x_all[i1]
-                slope_last = (y_all[i2] - y_all[i1]) / dt
-                # amplify slope to enforce accel>0
-                slope3 = slope_last * 1.2
-                t3 = x_all[i2] + dt
-                y3 = y_all[i2] + slope3 * dt
-                ts3 = base + pd.to_timedelta(t3, unit="s")
-                synthetic = {"timestamp": ts3, "viewCount": int(y3)}
-                sel_idx = [i1, i2, "synthetic"]
+            # 세 점 시각화
+            fig, ax = plt.subplots(figsize=(6, 4))
+            ax.scatter(sel['timestamp'], sel['viewCount'], s=100)
+            ax.set_xlabel('시간'); ax.set_ylabel('조회수'); plt.xticks(rotation=45)
+            st.pyplot(fig)
+            st.markdown(f"**회귀식:** y = {a:.3e}x² + {b:.3e}x + {c:.3e}")
 
-            # 3) 선택된 점 DataFrame
-            pts = []
-            for idx in sel_idx:
-                if idx == "synthetic":
-                    pts.append(synthetic)
-                else:
-                    pts.append({
-                        "timestamp": df.loc[idx, "timestamp"],
-                        "viewCount": int(df.loc[idx, "viewCount"])
-                    })
-            sel_df = pd.DataFrame(pts)
-
-            # 4) regression
-            x_sel = (sel_df["timestamp"] - base).dt.total_seconds().values
-            y_sel = sel_df["viewCount"].values
-            a, b, c = np.polyfit(x_sel, y_sel, 2)
-
-            st.markdown(f"**회귀식:** `y = {a:.3e}·x² + {b:.3e}·x + {c:.3e}`")
-
-            # 5) 예측
-            roots = np.roots([a, b, c - 1_000_000])
-            rr = [r.real for r in roots if abs(r.imag) < 1e-6]
-            if rr:
-                t_pred = max(rr)
-                dt_pred = base + pd.to_timedelta(t_pred, unit="s")
-                st.write(f"▶️ 조회수 **1,000,000회** 돌파 예상 시점: **{dt_pred}**")
-
-            # 6) 시각화
-            fig, ax = plt.subplots(figsize=(8,4))
-            # 전체 데이터
-            ax.scatter(df["timestamp"], y_all, color="skyblue", alpha=0.6, s=20, label="전체 실제 데이터")
-            # 포물선 곡선
-            ts_curve = np.linspace(x_all.min(), x_all.max(), 300)
-            ax.plot(
-                base + pd.to_timedelta(ts_curve, unit="s"),
-                a*ts_curve**2 + b*ts_curve + c,
-                color="orange", lw=2, label="2차 회귀곡선 (전체)"
+            # 정수화된 회귀식 및 그래프
+            a_int, b_int, c_int = np.round([a, b, c]).astype(int)
+            ts_int = np.linspace(0, x.max(), 200)
+            fig_int, ax_int = plt.subplots(figsize=(6, 4))
+            ax_int.plot(
+                base + pd.to_timedelta(ts_int, 's'),
+                a_int*ts_int**2 + b_int*ts_int + c_int
             )
-            # 실제 선택 점
-            real_idxs = [idx for idx in sel_idx if idx != "synthetic"]
-            ax.scatter(df.loc[real_idxs, "timestamp"], df.loc[real_idxs, "viewCount"],
-                    color="green", s=80, label="선택된 실제 점")
-            # synthetic 점
-            if synthetic:
-                ax.scatter(synthetic["timestamp"], synthetic["viewCount"],
-                        color="red", s=100, label="Synthetic 점")
+            ax_int.set_xlabel('시간'); ax_int.set_ylabel('조회수'); plt.xticks(rotation=45)
+            st.pyplot(fig_int)
+            st.markdown(f"**정수화된 회귀식:** y = {a_int}x² + {b_int}x + {c_int}")
 
-            # x축 전체
-            ax.set_xlim(df["timestamp"].min(), df["timestamp"].max())
-            # y축
-            y_min = min(y_all.min(), y_sel.min()) * 0.9
-            y_max = max(y_all.max(), y_sel.max()) * 1.1
-            ax.set_ylim(y_min, y_max)
+            st.session_state['a'], st.session_state['b'], st.session_state['c'] = a, b, c
+            st.session_state['base'] = base
+            st.session_state['x'], st.session_state['y'] = x, y
 
-            ax.set_xlabel("시간")
-            ax.set_ylabel("조회수")
-            ax.legend()
-            plt.xticks(rotation=45)
-            st.pyplot(fig)
+                        # 실측 대비 회귀 성능 평가
+            if st.button("적합도 평가"):
+                y_pred = a * x**2 + b * x + c
+                mae = np.mean(np.abs(y - y_pred))
+                rmse = np.sqrt(np.mean((y - y_pred)**2))
+                mse = np.mean((y - y_pred)**2)
+                st.write(f"**평균절대오차(MAE):** {mae:,.2f}")
+                st.write(f"**제곱근평균제곱오차(RMSE):** {rmse:,.2f}")
+                st.write(f"**평균제곱오차(MSE):** {mse:,.2f}")
 
-    elif step==3:
-        step_header("2️⃣-2️⃣ γ(광고효과) 시뮬레이션",
-                "모델을 확장하여 마케팅 변수 고려하기",
-                ["γ 값은 어떻게 해석할까?", "만약 광고비를 두 배로 늘린다면?", "광고비가 효율적일 조건은?"])
-        df = pd.DataFrame(records)
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
-        df["viewCount"]  = df["viewCount"].astype(int)
-        df = df.sort_values("timestamp").reset_index(drop=True)
+                mean_views = y.mean()
+                mae_ratio = mae / mean_views * 100
+                st.write(f"📊 MAE/평균 조회수 비율: {mae_ratio:.2f}%")
 
-        base = df["timestamp"].min()
-        x = (df["timestamp"] - base).dt.total_seconds().values
-        y = df["viewCount"].values
+                data_range = y.max() - y.min()
+                mae_range = mae / data_range * 100
+                st.write(f"📊 MAE/범위 비율: {mae_range:.2f}%")
 
-        # 시간 기반 2차 회귀 계수
-        a, b, c = np.polyfit(x, y, 2)
-        time_poly = np.poly1d([a, b, c])
+                mape = np.mean(np.abs((y - y_pred) / y)) * 100
+                st.write(f"📊 평균절대백분율오차(MAPE): {mape:.2f}%")
 
-        st.markdown(f"**시간 모델:**  $y_\\mathrm{{time}}=\\,{a:.3e}x^2 \\,+\\,{b:.3e}x\\,+\\,{c:.3e}$")
+                residuals = y - y_pred
+                fig_res, ax_res = plt.subplots(figsize=(6, 3))
+                ax_res.scatter(df['timestamp'], residuals)
+                ax_res.axhline(0, linestyle='--')
+                ax_res.set_xlabel('시간'); ax_res.set_ylabel('Residuals')
+                plt.xticks(rotation=45)
+                st.pyplot(fig_res)
 
-        # 2) 광고비 입력
-        budget = st.number_input("투입할 광고비를 입력하세요 (원)", min_value=0, step=1000, value=1000000)
+            # 실제 데이터 더보기 및 차이 이유 저장
+            if st.button("실제 데이터 더 확인하기"):
+                ts_curve = np.linspace(0, x.max(), 200)
+                fig2, ax2 = plt.subplots(figsize=(6, 4))
+                ax2.scatter(df['timestamp'], y, alpha=0.5)
+                ax2.plot(
+                    base + pd.to_timedelta(ts_curve, 's'), a*ts_curve**2 + b*ts_curve + c
+                )
+                ax2.set_xlabel('시간'); ax2.set_ylabel('조회수'); plt.xticks(rotation=45)
+                st.pyplot(fig2)
 
-        with st.expander("📖 γ(감마) 계수란?"):
-            st.markdown("""* **정의** : 광고 투자가 조회수 증가율에 주는 가속효과를 나타내는 상수입니다.\
-* **모형** : `views = base_views + γ·√budget`\
-* **교육적 해석** : √예산 형태는 체감효용을 단순화하여, '투자 대비 증가율 감소' 개념을 포물선과 연결해 보여줍니다.""")
+                reason = st.text_area('예측과 실제 차이가 나는 이유를 적어보세요.')
+                if st.button('이유 저장'):
+                    if reason.strip():
+                        ws = gc.open_by_key(yt_key).worksheet(yt_sheet_name)  # 시트 이름: {yt_sheet_name}
+                        safe_append(ws, [sid, datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'), reason])
+                        st.success('이유가 저장되었습니다!')
+                    else:
+                        st.warning('이유를 입력해주세요.')
             
-        # 광고비 효과 계수(γ)는 사용자 정의 혹은 과거 데이터로 회귀해서 추정
-        # 여기서는 간단히 γ=0.5 로 설정 (원당 √예산 0.5회 증가)
-        gamma = st.slider("광고비 효과계수 γ 설정", min_value=0.0, max_value=5.0, value=0.5)
-
-        # 3) 통합 예측
-        # - 현재 시점(마지막 데이터)에서의 시간 기반 예측
-        x_now = x[-1]
-        y_time_now = time_poly(x_now)
-
-        # - 광고비 효과
-        y_ad = gamma * np.sqrt(budget)
-
-        # - 합산
-        y_total = int(y_time_now + y_ad)
-
-        st.write(f"▶️ 시간 모델 예측 조회수: **{int(y_time_now):,}회**")
-        st.write(f"▶️ 광고비 효과 조회수: **{int(y_ad):,}회**")
-        st.write(f"▶️ **통합 예측 조회수:** **{y_total:,}회**")
-
-        # 4) 시각화
-        fig, ax = plt.subplots(figsize=(8,4))
-        # 실제 전체 데이터
-        ax.scatter(df["timestamp"], y, color="skyblue", alpha=0.6, s=20, label="실제 조회수")
-
-        # 시간 모델 곡선 (전체 구간)
-        ts_curve = np.linspace(0, x_now, 200)
-        ax.plot(base + pd.to_timedelta(ts_curve, unit="s"),
-                time_poly(ts_curve),
-                color="orange", lw=2, label="시간 모델 곡선")
-
-        # 현재 시점 포인트
-        t_now = base + pd.to_timedelta(x_now, unit="s")
-        ax.scatter(t_now, y_time_now, color="green", s=80, label="시간 모델 예측점")
-
-        # 광고비 효과 후 점
-        ax.scatter(t_now, y_time_now + y_ad, color="red", s=100, label="광고비 적용 예측점")
-
-        # 축 설정
-        ax.set_xlim(df["timestamp"].min(), df["timestamp"].max() + pd.Timedelta(hours=1))
-        ymin = min(y.min(), time_poly(x_now)) * 0.9
-        ymax = (time_poly(x_now) + gamma*np.sqrt(budget)) * 1.1
-        ax.set_ylim(ymin, ymax)
-
-        ax.set_xlabel("시간")
-        ax.set_ylabel("조회수")
-        ax.legend()
-        plt.xticks(rotation=45)
-        st.pyplot(fig)
-
-        if st.button("적합도 평가"):
-            # 1) MAE, RMSE 계산
-            y_pred_full = time_poly(x) + gamma * np.sqrt(budget)
-            mae  = np.mean(np.abs(y - y_pred_full))
-            rmse = np.sqrt(np.mean((y - y_pred_full)**2))
-            mse = np.mean((y - y_pred_full)**2)
-            st.write(f"**평균절대오차(MAE):** {mae:,.2f}")
-            st.write(f"**제곱근평균제곱오차(RMSE):** {rmse:,.2f}")
-            st.write(f"**평균제곱오차(MSE):** {mse:,.2f}")
-
-            mean_views = y.mean()
-            mae_ratio = mae / mean_views * 100  # MAE가 전체 평균의 몇 %인지
-            st.write(f"📊 MAE/평균 조회수 비율: {mae_ratio:.2f}%")
-
-            data_range = y.max() - y.min()
-            mae_range = mae / data_range * 100
-            st.write(f"📊 MAE/범위 비율: {mae_range:.2f}%")
-
-            mape = np.mean(np.abs((y - y_pred_full) / y)) * 100
-            st.write(f"📊 평균절대백분율오차(MAPE): {mape:.2f}%")
-
-            residuals = y - y_pred_full
-            fig, ax = plt.subplots()
-            ax.scatter(df["timestamp"], residuals)
-            ax.axhline(0, color='gray', linestyle='--')
-            st.pyplot(fig)
-
-        # ── 0) 학생 의견 입력란 추가 ──
-        st.subheader("💬 적합도 평가 의견 남기기")
+                    # ── 0) 학생 의견 입력란 추가 ──
+        st.subheader("💬 회귀분석과 적합도 평가 의견 남기기")
                 # ── 반 선택 ─────────────────────────────────────────
         cls = st.selectbox(
             "반을 선택하세요",              # 라벨
@@ -498,7 +379,7 @@ def main_ui():
         opinion_input = st.text_area(
             "모델 예측 결과와 실제 조회수의 차이에 대해 느낀 점이나 개선할 점을 적어주세요.",
             height=120,
-            placeholder="예) 저는 예측 모델이 너무 보수적이라고 느꼈습니다…"
+            placeholder="예) 모델이 영상 업로드 초기의 급격한 조회수 증가를 과대평가한 것 같습니다, 이차함수 회귀만으로는 예측이 제한적이라는 것을 느꼈습니다. 등등"
         )
 
         # 하나의 버튼으로 제출 → 요약 → 시트 저장
@@ -529,6 +410,92 @@ def main_ui():
                 ws.append_row([session, timestamp, opinion_input, summary])
 
                 st.success("의견과 요약이 시트에 저장되었습니다!")
+
+
+
+    elif step==3:
+        if 'a' in st.session_state:
+            step_header(
+                "2️⃣-2️⃣ γ(광고효과) 시뮬레이션",
+                "광고비 투입에 따른 조회수 증가를 실험해보세요",
+                ["γ 값은 어떻게 해석할까?", "만약 광고비를 두 배로 늘린다면?", "광고비가 효율적일 조건은?"]
+            )
+
+            # 2-1에서 저장한 회귀 계수와 원본 데이터 꺼내기
+            a, b, c = st.session_state['a'], st.session_state['b'], st.session_state['c']
+            base = st.session_state['base']
+            x, y = st.session_state['x'], st.session_state['y']
+            time_poly = np.poly1d([a, b, c])
+
+            # 광고비 및 γ 입력 (1만 원 단위)
+            budget = st.number_input(
+                "투입할 광고비를 입력하세요 (원)",
+                min_value=0,
+                step=10000,
+                value=1000000
+            )
+            gamma = st.slider(
+                "광고효과 계수 γ 설정",
+                min_value=0.0,
+                max_value=5.0,
+                value=0.5
+            )
+
+                        # 예측 시점 값 계산
+            x_now      = x[-1]
+            t_now      = base + pd.to_timedelta(x_now, 's')
+            y_time_now = time_poly(x_now)
+
+            # 광고비 단위 계산 (1만 원을 1단위로 본다)
+            unit  = 10000
+            units = budget // unit
+            y_ad  = gamma * units
+            y_total = y_time_now + y_ad
+
+            # 결과 출력
+            st.write(f"▶️ 시간 모델 예측 조회수: **{int(y_time_now):,}회**")
+            st.write(f"▶️ 광고비 효과 조회수: **{int(y_ad):,}회** (γ×{units})")
+            st.write(f"▶️ **통합 예측 조회수:** **{int(y_total):,}회**")
+
+            # 시각화
+            fig2, ax2 = plt.subplots(figsize=(8,4))
+            ax2.scatter(df['timestamp'], y, alpha=0.5, label="실제 조회수")
+            ts_curve = np.linspace(0, x_now, 200)
+            ax2.plot(
+                base + pd.to_timedelta(ts_curve, 's'),
+                time_poly(ts_curve),
+                color="orange", lw=2, label="시간 모델 곡선"
+            )
+            ax2.scatter(
+                t_now, y_time_now,
+                color="green", s=80, label="시간 모델 예측점"
+            )
+            ax2.scatter(
+                t_now, y_total,
+                color="red", s=100, label="광고비 적용 예측점"
+            )
+            ax2.set_xlabel("시간")
+            ax2.set_ylabel("조회수")
+            ax2.legend()
+            plt.xticks(rotation=45)
+            st.pyplot(fig2)
+
+        with st.expander("📖 γ(감마) 계수(광고효과)란?"):
+            st.markdown("""
+            - **γ(감마) 계수**: 광고비 1만 원을 썼을 때 늘어나는 조회수를 나타내는 숫자예요.  
+            예를 들어 γ=2라면, 광고비 1만 원당 조회수가 2회씩 늘어난다는 뜻이죠.
+
+            - **왜 1만 원 단위일까?**  
+            너무 큰 단위(100만 원)보다 작은 단위(1만 원)로 나누면 계산하기 쉽고,  
+            학생들도 `광고비 / 10,000`을 통해 늘어날 조회수를 바로 구해볼 수 있어요.
+
+            - **간단 모형**:  
+            ```
+            조회수_증가 = γ × (광고비 ÷ 10,000)
+            ```
+            - 광고비를 10만 원 썼을 때(=10×10,000), γ=3이면  
+                조회수_증가 = 3 × 10 = 30회
+            """)
 
     elif step==4:
         step_header("3️⃣ 토의 내용 입력 & 요약하기",
