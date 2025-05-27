@@ -284,7 +284,7 @@ def main_ui():
             # 3) to_datetime: format 지정 없이 넘기기
             df['timestamp'] = pd.to_datetime(df['timestamp'], errors='raise')
 
-            df['viewcount'] = df['viewcount'].astype(int)
+            df['viewCount'] = df['viewCount'].astype(int)
 
             # 6) 정렬
             df = df.sort_values('timestamp').reset_index(drop=True)
