@@ -47,10 +47,10 @@ yt_conf  = st.secrets["sheets"]["youtube"]  # 조회 기록용 시트
 usr_conf = st.secrets["sheets"]["users"]    # 회원DB용 시트
 YOUTUBE_API_KEY = st.secrets["youtube"]["api_key"]
 
-yt_wb     = yt_conf["spreadsheet_id"]
-yt_sheet  = yt_conf["sheet_name"]
-usr_wb    = usr_conf["spreadsheet_id"]
-usr_sheet = usr_conf["sheet_name"]
+yt_id     = yt_conf["spreadsheet_id"]
+yt_name  = yt_conf["sheet_name"]
+usr_id    = usr_conf["spreadsheet_id"]
+usr_name = usr_conf["sheet_name"]
 
 # ── Sheets 도우미 (429 백오프) ───────────────────────────────────────────────
 
@@ -130,7 +130,7 @@ def signup_ui():
         if pw_hash == "":
             st.error("비밀번호 처리에 문제가 발생했습니다.")
             return
-        rows = load_records(usr_sheet)
+        rows = load_sheet_records(usr_id, usr_name)
         if any(r["학번"] == sid for r in rows):
             st.error("이미 등록된 학번입니다.")
         else:
@@ -142,7 +142,7 @@ def signup_ui():
 # 로그인 UI
 def login_ui():
     st.header("🔐 로그인")
-    rows = load_sheet_records(usr_wb, usr_sheet)
+    rows = load_sheet_records(usr_id, usr_name)
     sid = st.text_input("학번", key="login_sid")
     pwd = st.text_input("비밀번호", type="password", key="login_pwd")
 
@@ -230,7 +230,7 @@ def main_ui():
     st.info(f"현재  {step}번째 활동 중")
 
     
-    all_records = load_sheet_records(yt_wb, yt_sheet)
+    all_records = load_sheet_records(yt_id, yt_name)
     records = [r for r in all_records if str(r.get('학번','')) == sid]
 
     if step==1:
