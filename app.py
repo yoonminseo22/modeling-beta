@@ -265,26 +265,39 @@ def main_ui():
         # 그래프 보기 버튼
         if st.button("회귀 분석하기"):
             df = pd.DataFrame(records)
-            df.columns = df.columns.str.strip().str.lower()
+            # ② 원본 칼럼명 리스트 찍어보기 (디버깅)
+            st.write("▶ 원본 칼럼명:", df.columns.tolist())
 
-            # 2) timestamp 문자열 클린업
-            df['timestamp'] = (
-                df['timestamp']
+            # ③ 'timestamp' 컬럼 동적 찾기
+            ts_col = next((c for c in df.columns 
+                        if c.strip().lower() == "timestamp"), None)
+            if ts_col is None:
+                st.error(f"❌ 타임스탬프 컬럼을 찾을 수 없습니다. 현재: {df.columns.tolist()}")
+                return
+
+            # ④ 클린업: 공백·BOM 제거
+            df[ts_col] = (
+                df[ts_col]
                 .astype(str)
-                # 하이픈(-) 주변의 모든 공백 제거: "2025- 5- 13" → "2025-5-13"
-                .str.replace(r'\s*-\s*', '-', regex=True)
-                # 연–월–일과 시간 사이, 기타 중복 공백도 하나로 통일
-                .str.replace(r'\s+', ' ', regex=True)
+                .str.replace(r'\ufeff', '', regex=False)  # BOM 제거
+                .str.replace(r'\s*-\s*', '-', regex=True)  # 하이픈 양옆 공백 제거
+                .str.replace(r'\s+', ' ', regex=True)      # 여러 공백 → 한 칸
                 .str.strip()
             )
 
-            # (디버깅) 실제 문자열 확인
-            st.write("▶ 클린업 후 timestamp 샘플:", df['timestamp'].head().tolist())
+            # ⑤ 파싱
+            df["timestamp"] = pd.to_datetime(df[ts_col], errors="raise")
 
-            # 3) to_datetime: format 지정 없이 넘기기
-            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='raise')
+            # ⑥ viewCount 컬럼도 동적 찾기
+            vc_col = next((c for c in df.columns 
+                        if c.strip().lower() in ("viewCount","view_Count")), None)
+            if vc_col is None:
+                st.error(f"❌ 조회수 컬럼을 찾을 수 없습니다. 현재: {df.columns.tolist()}")
+                return
+            df["viewCount"] = df[vc_col].astype(int)
 
-            df['viewCount'] = df['viewCount'].astype(int)
+            # ⑦ 이제 정리
+            df = df.sort_values("timestamp").reset_index(drop=True)
 
             # 6) 정렬
             df = df.sort_values('timestamp').reset_index(drop=True)
