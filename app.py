@@ -265,19 +265,27 @@ def main_ui():
         # 그래프 보기 버튼
         if st.button("회귀 분석하기"):
             df = pd.DataFrame(records)
-            df.columns = df.columns.str.strip()
-            df['timestamp'] = (
-                df['timestamp']
-                .astype(str)
-                .str.replace(r'\s*-\s*', '-', regex=True)  # "2025- 5- 13" → "2025-5-13"
-                .str.replace(r'\s+', ' ', regex=True)      # 여러 칸 공백 → 한 칸
-                .str.strip()                               # 앞뒤 공백 제거
+            df.columns = (
+                df.columns
+                .str.replace('\ufeff', '', regex=False)  # BOM 제거
+                .str.strip()                              # 양쪽 공백 제거
+                .str.lower()                              # 모두 소문자
             )
 
-            # 3) 이제 안전하게 파싱
-            df['timestamp'] = pd.to_datetime(df['timestamp'], format='%Y-%m-%d %H:%M:%S', errors='raise')
+            # 3) 컬럼 목록 출력(디버깅용)
+            st.write("▶️ 현재 컬럼명들:", df.columns.tolist())
 
-            df['viewCount'] = df['viewCount'].astype(int)
+            # 4) 'timestamp' 칼럼이 있는지 체크
+            if 'timestamp' not in df.columns:
+                st.error(f"❌ 'timestamp' 칼럼을 찾을 수 없습니다. (현재: {df.columns.tolist()})")
+                return
+
+            # 5) 변환
+            df['timestamp'] = pd.to_datetime(df['timestamp'], format='%Y-%m-%d %H:%M:%S', errors='raise')
+            df['viewcount'] = df['viewcount'].astype(int)
+
+            # 6) 정렬
+            df = df.sort_values('timestamp').reset_index(drop=True)
             df = df.sort_values('timestamp').reset_index(drop=True)
             base = df['timestamp'].min()
             x = (df['timestamp'] - base).dt.total_seconds().values
