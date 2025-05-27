@@ -47,10 +47,10 @@ yt_conf  = st.secrets["sheets"]["youtube"]  # 조회 기록용 시트
 usr_conf = st.secrets["sheets"]["users"]    # 회원DB용 시트
 YOUTUBE_API_KEY = st.secrets["youtube"]["api_key"]
 
-yt_wb     = gc.open_by_key(yt_conf["spreadsheet_id"])
-yt_sheet  = yt_wb.worksheet(yt_conf["sheet_name"])
-usr_wb    = gc.open_by_key(usr_conf["spreadsheet_id"])
-usr_sheet = usr_wb.worksheet(usr_conf["sheet_name"])
+yt_wb     = yt_conf["spreadsheet_id"]
+yt_sheet  = yt_conf["sheet_name"]
+usr_wb    = usr_conf["spreadsheet_id"]
+usr_sheet = usr_conf["sheet_name"]
 
 # ── Sheets 도우미 (429 백오프) ───────────────────────────────────────────────
 
@@ -68,9 +68,9 @@ def safe_append(ws, row: List[Any]):
     st.error("❌ Google Sheets 쿼터 초과 – 잠시 후 다시 시도하세요.")
 
 @st.cache_data(ttl=300, show_spinner=False)
-def load_youtube_records(_spreadsheet_id: str, sheet_name: str) -> list:
+def load_sheet_records(_spreadsheet_id: str, _sheet_name: str) -> list:
     """유튜브 기록을 5분간 캐싱하여 호출 횟수 최소화."""
-    ws = gc.open_by_key(_spreadsheet_id).worksheet(sheet_name)
+    ws = gc.open_by_key(_spreadsheet_id).worksheet(_sheet_name)
     return ws.get_all_records()
 
 VIDEO_CRITERIA = {"max_views":1_000_000, "min_subs":1_000, "max_subs":3_000_000}
@@ -142,7 +142,7 @@ def signup_ui():
 # 로그인 UI
 def login_ui():
     st.header("🔐 로그인")
-    rows = load_youtube_records(usr_wb, usr_sheet)
+    rows = load_sheet_records(usr_wb, usr_sheet)
     sid = st.text_input("학번", key="login_sid")
     pwd = st.text_input("비밀번호", type="password", key="login_pwd")
 
@@ -230,7 +230,7 @@ def main_ui():
     st.info(f"현재  {step}번째 활동 중")
 
     
-    all_records = load_youtube_records(yt_wb, yt_sheet)
+    all_records = load_sheet_records(yt_wb, yt_sheet)
     records = [r for r in all_records if str(r.get('학번','')) == sid]
 
     if step==1:
