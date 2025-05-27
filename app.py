@@ -265,7 +265,18 @@ def main_ui():
         # 그래프 보기 버튼
         if st.button("회귀 분석하기"):
             df = pd.DataFrame(records)
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            df.columns = df.columns.str.strip()
+            df['timestamp'] = (
+                df['timestamp']
+                .astype(str)
+                .str.replace(r'\s*-\s*', '-', regex=True)  # "2025- 5- 13" → "2025-5-13"
+                .str.replace(r'\s+', ' ', regex=True)      # 여러 칸 공백 → 한 칸
+                .str.strip()                               # 앞뒤 공백 제거
+            )
+
+            # 3) 이제 안전하게 파싱
+            df['timestamp'] = pd.to_datetime(df['timestamp'], format='%Y-%m-%d %H:%M:%S', errors='raise')
+
             df['viewCount'] = df['viewCount'].astype(int)
             df = df.sort_values('timestamp').reset_index(drop=True)
             base = df['timestamp'].min()
