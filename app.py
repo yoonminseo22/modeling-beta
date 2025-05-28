@@ -12,6 +12,7 @@ from typing import Dict, Any, List, Tuple
 import os, time, json, math, textwrap, hashlib, requests
 from oauth2client.service_account import ServiceAccountCredentials
 from itertools import combinations
+import io
 
 # 기본 설정
 openai.api_key = st.secrets["openai"]["api_key"]
@@ -329,6 +330,16 @@ def main_ui():
             ax.scatter(sel['timestamp'], sel['viewcount'], s=100)
             ax.set_xlabel('시간'); ax.set_ylabel('조회수'); plt.xticks(rotation=45)
             st.pyplot(fig)
+
+            buf = io.BytesIO()
+            fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+            buf.seek(0)
+            st.download_button(
+                label="📷 회귀분석 그래프 다운로드",
+                data=buf,
+                file_name="regression_plot.png",
+                mime="image/png"
+            )
             st.markdown(f"**회귀식:** y = {a:.3e}x² + {b:.3e}x + {c:.3e}")
 
             # 정수화된 회귀식 및 그래프
@@ -521,6 +532,16 @@ def main_ui():
         ax2.legend()
         plt.xticks(rotation=45)
         st.pyplot(fig2)
+
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+        buf.seek(0)
+        st.download_button(
+            label="📷 광고비 적용 그래프 다운로드",
+            data=buf,
+            file_name="budget_plot.png",
+            mime="image/png"
+        )
 
         with st.expander("📖 γ(감마) 계수(광고효과)란?"):
             st.markdown("""
