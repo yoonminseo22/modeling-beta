@@ -416,7 +416,7 @@ def main_ui():
                 st.pyplot(fig2)
 
                 buf1 = io.BytesIO()
-                fig.savefig(buf1, format='png', dpi=150, bbox_inches='tight')
+                fig2.savefig(buf1, format='png', dpi=150, bbox_inches='tight')
                 buf1.seek(0)
                 st.download_button(
                     label="📷 실제 데이터 그래프 다운로드",
@@ -544,7 +544,7 @@ def main_ui():
         st.pyplot(fig2)
 
         buf2 = io.BytesIO()
-        fig.savefig(buf2, format='png', dpi=150, bbox_inches='tight')
+        fig2.savefig(buf2, format='png', dpi=150, bbox_inches='tight')
         buf2.seek(0)
         st.download_button(
             label="📷 광고비 적용 그래프 다운로드",
