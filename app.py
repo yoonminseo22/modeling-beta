@@ -414,6 +414,16 @@ def main_ui():
                 ax2.set_xlabel('시간'); ax2.set_ylabel('조회수')
                 plt.xticks(rotation=45)
                 st.pyplot(fig2)
+
+                buf = io.BytesIO()
+                fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+                buf.seek(0)
+                st.download_button(
+                    label="📷 실제 데이터 그래프 다운로드",
+                    data=buf,
+                    file_name="rea_data_plot.png",
+                    mime="image/png"
+                )
             
                     # ── 0) 학생 의견 입력란 추가 ──
         st.subheader("💬 회귀분석과 적합도 평가 의견 남기기")
