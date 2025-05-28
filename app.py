@@ -352,7 +352,13 @@ def main_ui():
             st.pyplot(fig_int)
 
             st.markdown(f"**정수화된 회귀식:** y = {a_int}x² + {b_int}x + {c_int}")
-
+            st.session_state["a"]    = a
+            st.session_state["b"]    = b
+            st.session_state["c"]    = c
+            st.session_state["base"] = base
+            st.session_state["x"]    = x
+            st.session_state["y"]    = y
+            
             st.session_state["eval_clicked"]   = False
             st.session_state["detail_clicked"] = False
 
