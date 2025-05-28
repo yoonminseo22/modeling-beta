@@ -154,7 +154,7 @@ def signup_ui():
 # 로그인 UI
 def login_ui():
     st.header("🔐 로그인")
-    rows = load_sheet_records(usr_id, usr_name)
+    usr_rows = load_sheet_records(usr_id, usr_name)
     sid = st.text_input("학번", key="login_sid")
     pwd = st.text_input("비밀번호", type="password", key="login_pwd")
 
@@ -169,7 +169,7 @@ def login_ui():
         # 이미 해시된 비밀번호
         pw_hash = hash_password(pwd)
         # 학번으로 회원 찾기
-        user = next((r for r in rows if int(r["학번"]) == sid_int), None)
+        user = next((r for r in usr_rows if int(r["학번"]) == sid_int), None)
         if not user:
             st.error("❌ 등록되지 않은 학번입니다.")
             return
@@ -246,8 +246,8 @@ def main_ui():
     ss = gc.open_by_key(yt_id)
     titles = [ws.title for ws in ss.worksheets()]
     st.write("▶ 워크북 내 모든 시트 이름:", titles)
-    all_records = load_sheet_records(yt_id, yt_name)
-    records = [r for r in all_records if str(r.get('학번','')) == sid]
+    yt_rows = load_sheet_records(yt_id, yt_name)
+    records = [r for r in yt_rows if str(r.get('학번','')) == sid]
     yt_ws = gc.open_by_key(yt_id).worksheet(yt_name)
 
     if records:
