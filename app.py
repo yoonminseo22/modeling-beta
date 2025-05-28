@@ -344,56 +344,72 @@ def main_ui():
             st.markdown(f"**회귀식:** y = {a:.3e}x² + {b:.3e}x + {c:.3e}")
 
             # 정수화된 회귀식 및 그래프
-            a_int, b_int, c_int = np.round([a, b, c]).astype(int)
+            a_int = int(round(a))
+            b_int = int(round(b))
+            c_int = int(round(c))
+
+            # 2) 이차항이 0이 되지 않도록 보정
+            if a_int == 0:
+                a_int = 1 if a > 0 else -1
+
+            # 3) 시각화
             ts_int = np.linspace(0, x.max(), 200)
             fig_int, ax_int = plt.subplots(figsize=(6, 4))
             ax_int.plot(
                 base + pd.to_timedelta(ts_int, 's'),
                 a_int*ts_int**2 + b_int*ts_int + c_int
             )
-            ax_int.set_xlabel('시간'); ax_int.set_ylabel('조회수'); plt.xticks(rotation=45)
+            ax_int.set_xlabel('시간'); ax_int.set_ylabel('조회수')
+            plt.xticks(rotation=45)
             st.pyplot(fig_int)
+
             st.markdown(f"**정수화된 회귀식:** y = {a_int}x² + {b_int}x + {c_int}")
 
-                        # 실측 대비 회귀 성능 평가
-            if st.button("적합도 평가"):
-                y_pred = a * x**2 + b * x + c
-                mae = np.mean(np.abs(y - y_pred))
-                rmse = np.sqrt(np.mean((y - y_pred)**2))
-                mse = np.mean((y - y_pred)**2)
-                st.write(f"**평균절대오차(MAE):** {mae:,.2f}")
-                st.write(f"**제곱근평균제곱오차(RMSE):** {rmse:,.2f}")
-                st.write(f"**평균제곱오차(MSE):** {mse:,.2f}")
 
-                mean_views = y.mean()
-                mae_ratio = mae / mean_views * 100
-                st.write(f"📊 MAE/평균 조회수 비율: {mae_ratio:.2f}%")
+            if st.button("적합도 평가", key="eval_button"):
+                st.session_state["eval_clicked"] = True
+                if st.session_state.get("eval_clicked", False):
+                    y_pred = a * x**2 + b * x + c
+                    mae    = np.mean(np.abs(y - y_pred))
+                    rmse   = np.sqrt(np.mean((y - y_pred)**2))
+                    mse    = np.mean((y - y_pred)**2)
 
-                data_range = y.max() - y.min()
-                mae_range = mae / data_range * 100
-                st.write(f"📊 MAE/범위 비율: {mae_range:.2f}%")
+                    st.write(f"**평균절대오차(MAE):** {mae:,.2f}")
+                    st.write(f"**제곱근평균제곱오차(RMSE):** {rmse:,.2f}")
+                    st.write(f"**평균제곱오차(MSE):** {mse:,.2f}")
 
-                mape = np.mean(np.abs((y - y_pred) / y)) * 100
-                st.write(f"📊 평균절대백분율오차(MAPE): {mape:.2f}%")
+                    mean_views = y.mean()
+                    mae_ratio = mae / mean_views * 100
+                    st.write(f"📊 MAE/평균 조회수 비율: {mae_ratio:.2f}%")
 
-                residuals = y - y_pred
-                fig_res, ax_res = plt.subplots(figsize=(6, 3))
-                ax_res.scatter(df['timestamp'], residuals)
-                ax_res.axhline(0, linestyle='--')
-                ax_res.set_xlabel('시간'); ax_res.set_ylabel('Residuals')
-                plt.xticks(rotation=45)
-                st.pyplot(fig_res)
+                    data_range = y.max() - y.min()
+                    mae_range = mae / data_range * 100
+                    st.write(f"📊 MAE/범위 비율: {mae_range:.2f}%")
 
-            # 실제 데이터 더보기 및 차이 이유 저장
-            if st.button("실제 데이터 더 확인하기"):
-                ts_curve = np.linspace(0, x.max(), 200)
-                fig2, ax2 = plt.subplots(figsize=(6, 4))
-                ax2.scatter(df['timestamp'], y, alpha=0.5)
-                ax2.plot(
-                    base + pd.to_timedelta(ts_curve, 's'), a*ts_curve**2 + b*ts_curve + c
-                )
-                ax2.set_xlabel('시간'); ax2.set_ylabel('조회수'); plt.xticks(rotation=45)
-                st.pyplot(fig2)
+                    mape = np.mean(np.abs((y - y_pred) / y)) * 100
+                    st.write(f"📊 평균절대백분율오차(MAPE): {mape:.2f}%")
+
+                    residuals = y - y_pred
+                    fig_res, ax_res = plt.subplots(figsize=(6, 3))
+                    ax_res.scatter(df['timestamp'], residuals)
+                    ax_res.axhline(0, linestyle='--')
+                    ax_res.set_xlabel('시간'); ax_res.set_ylabel('Residuals')
+                    plt.xticks(rotation=45)
+                    st.pyplot(fig_res)
+
+            if st.button("실제 데이터 더 확인하기", key="detail_button"):
+                st.session_state["detail_clicked"] = True
+                if st.session_state.get("detail_clicked", False):
+                    ts_curve = np.linspace(0, x.max(), 200)
+                    fig2, ax2 = plt.subplots(figsize=(6, 4))
+                    ax2.scatter(df['timestamp'], y, alpha=0.5)
+                    ax2.plot(
+                        base + pd.to_timedelta(ts_curve, 's'),
+                        a*ts_curve**2 + b*ts_curve + c
+                    )
+                    ax2.set_xlabel('시간'); ax2.set_ylabel('조회수')
+                    plt.xticks(rotation=45)
+                    st.pyplot(fig2)
             
                     # ── 0) 학생 의견 입력란 추가 ──
         st.subheader("💬 회귀분석과 적합도 평가 의견 남기기")
