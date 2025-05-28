@@ -241,7 +241,10 @@ def main_ui():
     step=st.session_state['step']
     st.info(f"현재  {step}번째 활동 중")
 
-
+    ss_user = gc.open_by_key(usr_id)
+    ss_yt   = gc.open_by_key(yt_id)
+    st.write("▶ user spreadsheet title:", ss_user.title)
+    st.write("▶ yt   spreadsheet title:", ss_yt.title)
     yt_rows = load_sheet_records(yt_id, yt_name)
     records = [r for r in yt_rows if str(r.get('학번','')) == sid]
     yt_ws = gc.open_by_key(yt_id).worksheet(yt_name)
@@ -256,11 +259,7 @@ def main_ui():
 
     if records:
         df = pd.DataFrame(records)
-        st.write("▶ DEBUG – 원본 컬럼명:", df.columns.tolist())
-
         df.columns = df.columns.str.strip().str.lower()
-        st.write("▶ DEBUG – 정리 후 컬럼명:", df.columns.tolist())
-
         df['timestamp'] = (
             df['timestamp']
             .astype(str)
