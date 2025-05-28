@@ -84,6 +84,14 @@ def load_sheet_records(_spreadsheet_id: str, _sheet_name: str) -> list:
                 raise
     return []
 
+@st.cache_data
+def load_user_records():
+    return load_sheet_records(usr_id, usr_name)
+
+@st.cache_data
+def load_yt_records():
+    return load_sheet_records(yt_id, yt_name)
+
 VIDEO_CRITERIA = {"max_views":1_000_000, "min_subs":100_000, "max_subs":3_000_000}
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -309,18 +317,7 @@ def main_ui():
         if not records:
             st.info("내 기록이 아직 없습니다. 먼저 '1️⃣ 조회수 기록하기'로 기록하세요.")
             return
-        
-        df = pd.DataFrame(records)
-        # 2) 컬럼명 모두 소문자·공백 제거
-        df.columns = (
-            df.columns
-            .str.strip()           # 앞뒤 공백 제거
-            .str.lower()           # 모두 소문자로
-        )
-
-        # 이제 df.columns 를 찍어보면:
-        # ['학번','video_id','timestamp','viewcount','likecount','commentcount']
-
+    
         # 그래프 보기 버튼
         if st.button("회귀 분석하기"):
             # 최적 세 점 선택
