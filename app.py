@@ -141,8 +141,8 @@ def signup_ui():
         if pw_hash == "":
             st.error("비밀번호 처리에 문제가 발생했습니다.")
             return
-        rows = load_sheet_records(usr_id, usr_name)
-        if any(r["학번"] == sid for r in rows):
+        usr_rows = load_sheet_records(usr_id, usr_name)
+        if any(r["학번"] == sid for r in usr_rows):
             st.error("이미 등록된 학번입니다.")
         else:
             sid_text=f"'{sid}"
@@ -245,6 +245,8 @@ def main_ui():
     ss_yt   = gc.open_by_key(yt_id)
     st.write("▶ user spreadsheet title:", ss_user.title)
     st.write("▶ yt   spreadsheet title:", ss_yt.title)
+    st.write("▶ Database-beta 스프레드시트의 시트들:", 
+             [ws.title for ws in ss_user.worksheets()])
     yt_rows = load_sheet_records(yt_id, yt_name)
     records = [r for r in yt_rows if str(r.get('학번','')) == sid]
     yt_ws = gc.open_by_key(yt_id).worksheet(yt_name)
