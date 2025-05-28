@@ -161,6 +161,7 @@ def signup_ui():
 
 # 로그인 UI
 def login_ui():
+    st.cache_data.clear()
     st.header("🔐 로그인")
     usr_rows = load_sheet_records(usr_id, usr_name)
     sid = st.text_input("학번", key="login_sid")
