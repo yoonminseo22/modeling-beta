@@ -340,25 +340,15 @@ def main_ui():
             if a_int == 0:
                 a_int = 1 if a > 0 else -1
 
-            # 3) 시각화
-            ts_int = np.linspace(0, x.max(), 200)
-            fig_int, ax_int = plt.subplots(figsize=(6, 4))
-            ax_int.plot(
-                base + pd.to_timedelta(ts_int, 's'),
-                a_int*ts_int**2 + b_int*ts_int + c_int
-            )
-            ax_int.set_xlabel('시간'); ax_int.set_ylabel('조회수')
-            plt.xticks(rotation=45)
-            st.pyplot(fig_int)
-
             st.markdown(f"**정수화된 회귀식:** y = {a_int}x² + {b_int}x + {c_int}")
+            st.markdown(f"식을 보고 축의 방정식, 볼록성, 꼭짓점, y절편을 찾아보세요.")
             st.session_state["a"]    = a
             st.session_state["b"]    = b
             st.session_state["c"]    = c
             st.session_state["base"] = base
             st.session_state["x"]    = x
             st.session_state["y"]    = y
-            
+
             st.session_state["eval_clicked"]   = False
             st.session_state["detail_clicked"] = False
 
@@ -395,7 +385,7 @@ def main_ui():
                 fig_res, ax_res = plt.subplots(figsize=(6, 3))
                 ax_res.scatter(df['timestamp'], residuals)
                 ax_res.axhline(0, linestyle='--')
-                ax_res.set_xlabel('시간'); ax_res.set_ylabel('Residuals')
+                ax_res.set_xlabel('시간'); ax_res.set_ylabel('잔차차')
                 plt.xticks(rotation=45)
                 st.pyplot(fig_res)
 
