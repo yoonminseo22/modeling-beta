@@ -307,11 +307,11 @@ def main_ui():
                 candidates.append((mse, (i, j, k)))
             idxs = min(candidates, key=lambda v: v[0])[1] if candidates else list(range(min(3, len(df))))
             sel = df.loc[list(idxs)]
-            a, b, c = np.polyfit((sel['timestamp'] - base).dt.total_seconds(), sel['viewCount'], 2)
+            a, b, c = np.polyfit((sel['timestamp'] - base).dt.total_seconds(), sel['viewcount'], 2)
 
             # 세 점 시각화
             fig, ax = plt.subplots(figsize=(6, 4))
-            ax.scatter(sel['timestamp'], sel['viewCount'], s=100)
+            ax.scatter(sel['timestamp'], sel['viewcount'], s=100)
             ax.set_xlabel('시간'); ax.set_ylabel('조회수'); plt.xticks(rotation=45)
             st.pyplot(fig)
             st.markdown(f"**회귀식:** y = {a:.3e}x² + {b:.3e}x + {c:.3e}")
