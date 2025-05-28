@@ -235,6 +235,7 @@ def summarize_discussion(text):
 
 # --- 8) 메인 화면(로그인 후) ---
 def main_ui():
+    load_sheet_records.clear()
     user = st.session_state["user"]
     sid = str(user["학번"]) 
     st.sidebar.success(f"👋 {user['이름']}님, 반갑습니다!")
