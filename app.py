@@ -246,6 +246,10 @@ def main_ui():
     records = [r for r in yt_rows if str(r.get('학번','')) == sid]
     yt_ws = gc.open_by_key(yt_id).worksheet(yt_name)
     usr_rows = load_sheet_records(usr_id, usr_name)
+    st.write("▶ usr_id      :", usr_id)
+    st.write("▶ usr_name    :", usr_name)
+    st.write("▶ yt_id       :", yt_id)
+    st.write("▶ yt_name     :", yt_name)
     st.write("▶ user_rows 컬럼:", pd.DataFrame(usr_rows).columns.tolist())
     st.write("▶ yt_rows 컬럼:", pd.DataFrame(yt_rows).columns.tolist())
     st.write("▶ records 컬럼:", pd.DataFrame(records).columns.tolist())
