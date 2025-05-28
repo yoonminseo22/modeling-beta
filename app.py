@@ -415,12 +415,12 @@ def main_ui():
                 plt.xticks(rotation=45)
                 st.pyplot(fig2)
 
-                buf = io.BytesIO()
-                fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
-                buf.seek(0)
+                buf1 = io.BytesIO()
+                fig.savefig(buf1, format='png', dpi=150, bbox_inches='tight')
+                buf1.seek(0)
                 st.download_button(
                     label="📷 실제 데이터 그래프 다운로드",
-                    data=buf,
+                    data=buf1,
                     file_name="rea_data_plot.png",
                     mime="image/png"
                 )
@@ -543,12 +543,12 @@ def main_ui():
         plt.xticks(rotation=45)
         st.pyplot(fig2)
 
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
-        buf.seek(0)
+        buf2 = io.BytesIO()
+        fig.savefig(buf2, format='png', dpi=150, bbox_inches='tight')
+        buf2.seek(0)
         st.download_button(
             label="📷 광고비 적용 그래프 다운로드",
-            data=buf,
+            data=buf2,
             file_name="budget_plot.png",
             mime="image/png"
         )
