@@ -69,11 +69,22 @@ def safe_append(ws, row: List[Any]):
 
 @st.cache_data(ttl=300, show_spinner=False)
 def load_sheet_records(_spreadsheet_id: str, _sheet_name: str) -> list:
-    """유튜브 기록을 5분간 캐싱하여 호출 횟수 최소화."""
-    ws = gc.open_by_key(_spreadsheet_id).worksheet(_sheet_name)
-    return ws.get_all_records()
+    """
+    구글 스프레드시트의 모든 레코드를 불러와 5분간 캐싱합니다.
+    429 에러 발생 시 최대 5번까지 지수 백오프를 시도합니다.
+    """
+    for wait in (0, 1, 2, 4, 8):
+        try:
+            ws = gc.open_by_key(_spreadsheet_id).worksheet(_sheet_name)
+            return ws.get_all_records()
+        except gspread.exceptions.APIError as e:
+            if getattr(e, 'response', None) and e.response.status == 429:
+                time.sleep(wait)
+            else:
+                raise
+    return []
 
-VIDEO_CRITERIA = {"max_views":1_000_000, "min_subs":1_000, "max_subs":3_000_000}
+VIDEO_CRITERIA = {"max_views":1_000_000, "min_subs":100_000, "max_subs":3_000_000}
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_video_details(vid: str) -> Dict[str,Any] | None:
@@ -135,7 +146,8 @@ def signup_ui():
             st.error("이미 등록된 학번입니다.")
         else:
             sid_text=f"'{sid}"
-            safe_append(usr_sheet, [sid_text, name, pw_hash])
+            ws = gc.open_by_key(usr_id).worksheet(usr_name)
+            safe_append(ws, [sid_text, name, pw_hash])
 
             st.success(f"{name}님, 회원가입이 완료되었습니다!")
 
@@ -157,7 +169,7 @@ def login_ui():
         # 이미 해시된 비밀번호
         pw_hash = hash_password(pwd)
         # 학번으로 회원 찾기
-        user = next((r for r in rows if str(r["학번"]) == sid), None)
+        user = next((r for r in rows if int(r["학번"]) == sid_int), None)
         if not user:
             st.error("❌ 등록되지 않은 학번입니다.")
             return
@@ -232,6 +244,28 @@ def main_ui():
     
     all_records = load_sheet_records(yt_id, yt_name)
     records = [r for r in all_records if str(r.get('학번','')) == sid]
+    yt_ws = gc.open_by_key(yt_id).worksheet(yt_name)
+
+    if records:
+        df = pd.DataFrame(records)
+        df.columns = df.columns.str.strip().str.lower()
+        df['timestamp'] = (
+            df['timestamp']
+            .astype(str)
+            .str.replace(r'\s*-\s*','-',regex=True)
+            .str.replace(r'\s+',' ',regex=True)
+            .str.strip()
+        )
+        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='raise')
+        df['viewcount'] = df['viewcount'].astype(int)
+        df = df.sort_values('timestamp').reset_index(drop=True)
+
+        base = df['timestamp'].min()
+        x = (df['timestamp'] - base).dt.total_seconds().values
+        y = df['viewcount'].values
+    else:
+        df = None
+
 
     if step==1:
         step_header("1️⃣ 유튜브 조회수 기록하기", "실생활 데이터로 이차함수 회귀 분석 시작하기",
@@ -252,7 +286,7 @@ def main_ui():
             # ['학번','video_id','timestamp','viewCount','likeCount','commentCount']
             stats = {k:info[k] for k in ('views',)}  # views만 사용
             ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            safe_append(yt_sheet, [sid, vid, ts, stats['views']])
+            safe_append(yt_ws, [sid, vid, ts, stats['views']])
             st.success("✅ 기록 완료")
 
     elif step==2:
@@ -262,40 +296,20 @@ def main_ui():
         if not records:
             st.info("내 기록이 아직 없습니다. 먼저 '1️⃣ 조회수 기록하기'로 기록하세요.")
             return
+        
+        df = pd.DataFrame(records)
+        # 2) 컬럼명 모두 소문자·공백 제거
+        df.columns = (
+            df.columns
+            .str.strip()           # 앞뒤 공백 제거
+            .str.lower()           # 모두 소문자로
+        )
+
+        # 이제 df.columns 를 찍어보면:
+        # ['학번','video_id','timestamp','viewcount','likecount','commentcount']
+
         # 그래프 보기 버튼
         if st.button("회귀 분석하기"):
-            df = pd.DataFrame(records)
-            # 2) 컬럼명 모두 소문자·공백 제거
-            df.columns = (
-                df.columns
-                .str.strip()           # 앞뒤 공백 제거
-                .str.lower()           # 모두 소문자로
-            )
-
-            # 이제 df.columns 를 찍어보면:
-            # ['학번','video_id','timestamp','viewcount','likecount','commentcount']
-
-            # 3) timestamp 클린업 & 파싱
-            df['timestamp'] = (
-                df['timestamp']
-                .astype(str)
-                .str.replace(r'\s*-\s*','-',regex=True)
-                .str.replace(r'\s+',' ',regex=True)
-                .str.strip()
-            )
-            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='raise')
-
-            # 4) viewcount 타입 변환
-            df['viewcount'] = df['viewcount'].astype(int)
-
-            # 5) 정렬
-            df = df.sort_values('timestamp').reset_index(drop=True)
-
-            # 6) x, y 뽑기
-            base = df['timestamp'].min()
-            x = (df['timestamp'] - base).dt.total_seconds().values
-            y = df['viewcount'].values
-
             # 최적 세 점 선택
             candidates = []
             for i, j, k in combinations(range(len(df)), 3):
@@ -308,6 +322,7 @@ def main_ui():
             idxs = min(candidates, key=lambda v: v[0])[1] if candidates else list(range(min(3, len(df))))
             sel = df.loc[list(idxs)]
             a, b, c = np.polyfit((sel['timestamp'] - base).dt.total_seconds(), sel['viewcount'], 2)
+            st.session_state.update({'a':a, 'b':b, 'c':c})
 
             # 세 점 시각화
             fig, ax = plt.subplots(figsize=(6, 4))
@@ -327,10 +342,6 @@ def main_ui():
             ax_int.set_xlabel('시간'); ax_int.set_ylabel('조회수'); plt.xticks(rotation=45)
             st.pyplot(fig_int)
             st.markdown(f"**정수화된 회귀식:** y = {a_int}x² + {b_int}x + {c_int}")
-
-            st.session_state['a'], st.session_state['b'], st.session_state['c'] = a, b, c
-            st.session_state['base'] = base
-            st.session_state['x'], st.session_state['y'] = x, y
 
                         # 실측 대비 회귀 성능 평가
             if st.button("적합도 평가"):
@@ -371,15 +382,6 @@ def main_ui():
                 )
                 ax2.set_xlabel('시간'); ax2.set_ylabel('조회수'); plt.xticks(rotation=45)
                 st.pyplot(fig2)
-
-                reason = st.text_area('예측과 실제 차이가 나는 이유를 적어보세요.')
-                if st.button('이유 저장'):
-                    if reason.strip():
-                        ws = gc.open_by_key(yt_key).worksheet(yt_sheet_name)  # 시트 이름: {yt_sheet_name}
-                        safe_append(ws, [sid, datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'), reason])
-                        st.success('이유가 저장되었습니다!')
-                    else:
-                        st.warning('이유를 입력해주세요.')
             
                     # ── 0) 학생 의견 입력란 추가 ──
         st.subheader("💬 회귀분석과 적합도 평가 의견 남기기")
@@ -427,82 +429,77 @@ def main_ui():
                 st.markdown("**요약:**  " + summary)
 
                 # 2) 스프레드시트에 기록
-                ss = gc.open_by_key(yt_conf["spreadsheet_id"])
-                ws = ss.worksheet("적합도평가")  # 시트 이름 확인
+                eval_sheet_name = "적합도평가"  # 필요하면 secrets.toml 에서 불러오세요
+                ws = gc.open_by_key(yt_id).worksheet(eval_sheet_name)
                 timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-                # [세션, 타임스탬프, 원문 의견, 요약]
-                ws.append_row([session, timestamp, opinion_input, summary])
+                row = [session, timestamp, opinion_input, summary]
+                safe_append(ws, row)
 
                 st.success("의견과 요약이 시트에 저장되었습니다!")
 
 
 
-    elif step==3:
-        if 'a' in st.session_state:
-            step_header(
-                "2️⃣-2️⃣ γ(광고효과) 시뮬레이션",
-                "광고비 투입에 따른 조회수 증가를 실험해보세요",
-                ["γ 값은 어떻게 해석할까?", "만약 광고비를 두 배로 늘린다면?", "광고비가 효율적일 조건은?"]
-            )
+    elif step==3 and all(k in st.session_state for k in ('a','b','c')):
+        step_header(
+            "2️⃣-2️⃣ γ(광고효과) 시뮬레이션",
+            "광고비 투입에 따른 조회수 증가를 실험해보세요",
+            ["γ 값은 어떻게 해석할까?", "만약 광고비를 두 배로 늘린다면?", "광고비가 효율적일 조건은?"]
+        )
+        a, b, c = st.session_state['a'], st.session_state['b'], st.session_state['c']
+        time_poly = np.poly1d([a, b, c])
 
-            # 2-1에서 저장한 회귀 계수와 원본 데이터 꺼내기
-            a, b, c = st.session_state['a'], st.session_state['b'], st.session_state['c']
-            base = st.session_state['base']
-            x, y = st.session_state['x'], st.session_state['y']
-            time_poly = np.poly1d([a, b, c])
+        # 광고비 및 γ 입력 (1만 원 단위)
+        budget = st.number_input(
+            "투입할 광고비를 입력하세요 (원)",
+            min_value=0,
+            step=10000,
+            value=1000000
+        )
+        gamma = st.slider(
+            "광고효과 계수 γ 설정",
+            min_value=0.0,
+            max_value=5.0,
+            value=0.5
+        )
 
-            # 광고비 및 γ 입력 (1만 원 단위)
-            budget = st.number_input(
-                "투입할 광고비를 입력하세요 (원)",
-                min_value=0,
-                step=10000,
-                value=1000000
-            )
-            gamma = st.slider(
-                "광고효과 계수 γ 설정",
-                min_value=0.0,
-                max_value=5.0,
-                value=0.5
-            )
+        # 예측 시점 값 계산
+        x_now      = x[-1]
+        t_now      = base + pd.to_timedelta(x_now, 's')
+        y_time_now = time_poly(x_now)
 
-                        # 예측 시점 값 계산
-            x_now      = x[-1]
-            t_now      = base + pd.to_timedelta(x_now, 's')
-            y_time_now = time_poly(x_now)
+        # 광고비 단위 계산 (1만 원을 1단위로 본다)
+        unit  = 10000
+        units = budget // unit
+        y_ad  = gamma * units
+        y_total = y_time_now + y_ad
 
-            # 광고비 단위 계산 (1만 원을 1단위로 본다)
-            unit  = 10000
-            units = budget // unit
-            y_ad  = gamma * units
-            y_total = y_time_now + y_ad
+        # 결과 출력
+        st.write(f"▶️ 시간 모델 예측 조회수: **{int(y_time_now):,}회**")
+        st.write(f"▶️ 광고비 효과 조회수: **{int(y_ad):,}회** (γ×{units})")
+        st.write(f"▶️ **통합 예측 조회수:** **{int(y_total):,}회**")
 
-            # 결과 출력
-            st.write(f"▶️ 시간 모델 예측 조회수: **{int(y_time_now):,}회**")
-            st.write(f"▶️ 광고비 효과 조회수: **{int(y_ad):,}회** (γ×{units})")
-            st.write(f"▶️ **통합 예측 조회수:** **{int(y_total):,}회**")
-
-            # 시각화
-            fig2, ax2 = plt.subplots(figsize=(8,4))
-            ax2.scatter(df['timestamp'], y, alpha=0.5, label="실제 조회수")
-            ts_curve = np.linspace(0, x_now, 200)
-            ax2.plot(
-                base + pd.to_timedelta(ts_curve, 's'),
-                time_poly(ts_curve),
-                color="orange", lw=2, label="시간 모델 곡선"
-            )
-            ax2.scatter(
-                t_now, y_time_now,
-                color="green", s=80, label="시간 모델 예측점"
-            )
-            ax2.scatter(
-                t_now, y_total,
-                color="red", s=100, label="광고비 적용 예측점"
-            )
-            ax2.set_xlabel("시간")
-            ax2.set_ylabel("조회수")
-            ax2.legend()
-            plt.xticks(rotation=45)
-            st.pyplot(fig2)
+        # 시각화
+        fig2, ax2 = plt.subplots(figsize=(8,4))
+        ax2.scatter(df['timestamp'], y, alpha=0.5, label="실제 조회수")
+        ts_curve = np.linspace(0, x_now, 200)
+        ax2.plot(
+            base + pd.to_timedelta(ts_curve, 's'),
+            time_poly(ts_curve),
+            color="orange", lw=2, label="시간 모델 곡선"
+        )
+        ax2.scatter(
+            t_now, y_time_now,
+            color="green", s=80, label="시간 모델 예측점"
+        )
+        ax2.scatter(
+            t_now, y_total,
+            color="red", s=100, label="광고비 적용 예측점"
+        )
+        ax2.set_xlabel("시간")
+        ax2.set_ylabel("조회수")
+        ax2.legend()
+        plt.xticks(rotation=45)
+        st.pyplot(fig2)
 
         with st.expander("📖 γ(감마) 계수(광고효과)란?"):
             st.markdown("""
@@ -556,19 +553,20 @@ def main_ui():
             st.write(summary)
 
             # 스프레드시트 기록
-            ss = gc.open_by_key(yt_conf["spreadsheet_id"])
+            ss = gc.open_by_key(yt_id)
             ds = ss.worksheet("토의요약")  # 미리 만들어두세요
             timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-            ds.append_row([session, timestamp, raw, summary])
+            row = [session, timestamp, raw, summary]
+            safe_append(ds, row)
             st.info("스프레드시트에 저장되었습니다.")
 
 def teacher_ui():
     st.title("🧑‍🏫 교사용 대시보드")
-    df = pd.DataFrame(load_records(yt_sheet), columns=["학번","video_id","timestamp","viewCount"])
+    df = pd.DataFrame(load_sheet_records(yt_name), columns=["학번","video_id","timestamp","viewcount"])
     if df.empty:
         st.info("데이터가 없습니다."); return
     st.metric("제출 건수", len(df))
-    st.metric("평균 조회수", int(df["viewCount"].mean()))
+    st.metric("평균 조회수", int(df["viewcount"].mean()))
     st.dataframe(df.tail(20))
 
 # === 메인 탭 구조 ===
