@@ -241,14 +241,13 @@ def main_ui():
     step=st.session_state['step']
     st.info(f"현재  {step}번째 활동 중")
 
-    st.write("▶ yt_id:", yt_id)
-    st.write("▶ yt_name:", yt_name)
-    ss = gc.open_by_key(yt_id)
-    titles = [ws.title for ws in ss.worksheets()]
-    st.write("▶ 워크북 내 모든 시트 이름:", titles)
+
     yt_rows = load_sheet_records(yt_id, yt_name)
     records = [r for r in yt_rows if str(r.get('학번','')) == sid]
     yt_ws = gc.open_by_key(yt_id).worksheet(yt_name)
+    st.write("▶ user_rows 컬럼:", pd.DataFrame(user_rows).columns.tolist())
+    st.write("▶ yt_rows 컬럼:", pd.DataFrame(yt_rows).columns.tolist())
+    st.write("▶ records 컬럼:", pd.DataFrame(records).columns.tolist())
 
     if records:
         df = pd.DataFrame(records)
