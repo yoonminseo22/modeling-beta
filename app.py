@@ -368,48 +368,48 @@ def main_ui():
 
             if st.button("적합도 평가", key="eval_button"):
                 st.session_state["eval_clicked"] = True
-                if st.session_state.get("eval_clicked", False):
-                    y_pred = a * x**2 + b * x + c
-                    mae    = np.mean(np.abs(y - y_pred))
-                    rmse   = np.sqrt(np.mean((y - y_pred)**2))
-                    mse    = np.mean((y - y_pred)**2)
+            if st.session_state.get("eval_clicked", False):
+                y_pred = a * x**2 + b * x + c
+                mae    = np.mean(np.abs(y - y_pred))
+                rmse   = np.sqrt(np.mean((y - y_pred)**2))
+                mse    = np.mean((y - y_pred)**2)
 
-                    st.write(f"**평균절대오차(MAE):** {mae:,.2f}")
-                    st.write(f"**제곱근평균제곱오차(RMSE):** {rmse:,.2f}")
-                    st.write(f"**평균제곱오차(MSE):** {mse:,.2f}")
+                st.write(f"**평균절대오차(MAE):** {mae:,.2f}")
+                st.write(f"**제곱근평균제곱오차(RMSE):** {rmse:,.2f}")
+                st.write(f"**평균제곱오차(MSE):** {mse:,.2f}")
 
-                    mean_views = y.mean()
-                    mae_ratio = mae / mean_views * 100
-                    st.write(f"📊 MAE/평균 조회수 비율: {mae_ratio:.2f}%")
+                mean_views = y.mean()
+                mae_ratio = mae / mean_views * 100
+                st.write(f"📊 MAE/평균 조회수 비율: {mae_ratio:.2f}%")
 
-                    data_range = y.max() - y.min()
-                    mae_range = mae / data_range * 100
-                    st.write(f"📊 MAE/범위 비율: {mae_range:.2f}%")
+                data_range = y.max() - y.min()
+                mae_range = mae / data_range * 100
+                st.write(f"📊 MAE/범위 비율: {mae_range:.2f}%")
 
-                    mape = np.mean(np.abs((y - y_pred) / y)) * 100
-                    st.write(f"📊 평균절대백분율오차(MAPE): {mape:.2f}%")
+                mape = np.mean(np.abs((y - y_pred) / y)) * 100
+                st.write(f"📊 평균절대백분율오차(MAPE): {mape:.2f}%")
 
-                    residuals = y - y_pred
-                    fig_res, ax_res = plt.subplots(figsize=(6, 3))
-                    ax_res.scatter(df['timestamp'], residuals)
-                    ax_res.axhline(0, linestyle='--')
-                    ax_res.set_xlabel('시간'); ax_res.set_ylabel('Residuals')
-                    plt.xticks(rotation=45)
-                    st.pyplot(fig_res)
+                residuals = y - y_pred
+                fig_res, ax_res = plt.subplots(figsize=(6, 3))
+                ax_res.scatter(df['timestamp'], residuals)
+                ax_res.axhline(0, linestyle='--')
+                ax_res.set_xlabel('시간'); ax_res.set_ylabel('Residuals')
+                plt.xticks(rotation=45)
+                st.pyplot(fig_res)
 
             if st.button("실제 데이터 더 확인하기", key="detail_button"):
                 st.session_state["detail_clicked"] = True
-                if st.session_state.get("detail_clicked", False):
-                    ts_curve = np.linspace(0, x.max(), 200)
-                    fig2, ax2 = plt.subplots(figsize=(6, 4))
-                    ax2.scatter(df['timestamp'], y, alpha=0.5)
-                    ax2.plot(
-                        base + pd.to_timedelta(ts_curve, 's'),
-                        a*ts_curve**2 + b*ts_curve + c
-                    )
-                    ax2.set_xlabel('시간'); ax2.set_ylabel('조회수')
-                    plt.xticks(rotation=45)
-                    st.pyplot(fig2)
+            if st.session_state.get("detail_clicked", False):
+                ts_curve = np.linspace(0, x.max(), 200)
+                fig2, ax2 = plt.subplots(figsize=(6, 4))
+                ax2.scatter(df['timestamp'], y, alpha=0.5)
+                ax2.plot(
+                    base + pd.to_timedelta(ts_curve, 's'),
+                    a*ts_curve**2 + b*ts_curve + c
+                )
+                ax2.set_xlabel('시간'); ax2.set_ylabel('조회수')
+                plt.xticks(rotation=45)
+                st.pyplot(fig2)
             
                     # ── 0) 학생 의견 입력란 추가 ──
         st.subheader("💬 회귀분석과 적합도 평가 의견 남기기")
