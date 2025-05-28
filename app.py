@@ -251,23 +251,11 @@ def main_ui():
     step=st.session_state['step']
     st.info(f"현재  {step}번째 활동 중")
 
-    ss_user = gc.open_by_key(usr_id)
-    ss_yt   = gc.open_by_key(yt_id)
-    st.write("▶ user spreadsheet title:", ss_user.title)
-    st.write("▶ yt   spreadsheet title:", ss_yt.title)
-    st.write("▶ Database-beta 스프레드시트의 시트들:", 
-             [ws.title for ws in ss_user.worksheets()])
+
     yt_rows = load_sheet_records(yt_id, yt_name)
     records = [r for r in yt_rows if str(r.get('학번','')) == sid]
     yt_ws = gc.open_by_key(yt_id).worksheet(yt_name)
     usr_rows = load_sheet_records(usr_id, usr_name)
-    st.write("▶ usr_id      :", usr_id)
-    st.write("▶ usr_name    :", usr_name)
-    st.write("▶ yt_id       :", yt_id)
-    st.write("▶ yt_name     :", yt_name)
-    st.write("▶ user_rows 컬럼:", pd.DataFrame(usr_rows).columns.tolist())
-    st.write("▶ yt_rows 컬럼:", pd.DataFrame(yt_rows).columns.tolist())
-    st.write("▶ records 컬럼:", pd.DataFrame(records).columns.tolist())
 
     if records:
         df = pd.DataFrame(records)
@@ -365,9 +353,17 @@ def main_ui():
 
             st.markdown(f"**정수화된 회귀식:** y = {a_int}x² + {b_int}x + {c_int}")
 
+            st.session_state["eval_clicked"]   = False
+            st.session_state["detail_clicked"] = False
+
+
+        if "a" in st.session_state:
+            a, b, c   = st.session_state["a"], st.session_state["b"], st.session_state["c"]
+            base, x, y = (st.session_state[k] for k in ("base","x","y"))
 
             if st.button("적합도 평가", key="eval_button"):
                 st.session_state["eval_clicked"] = True
+
             if st.session_state.get("eval_clicked", False):
                 y_pred = a * x**2 + b * x + c
                 mae    = np.mean(np.abs(y - y_pred))
@@ -399,6 +395,7 @@ def main_ui():
 
             if st.button("실제 데이터 더 확인하기", key="detail_button"):
                 st.session_state["detail_clicked"] = True
+
             if st.session_state.get("detail_clicked", False):
                 ts_curve = np.linspace(0, x.max(), 200)
                 fig2, ax2 = plt.subplots(figsize=(6, 4))
