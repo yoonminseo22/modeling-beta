@@ -248,7 +248,11 @@ def main_ui():
 
     if records:
         df = pd.DataFrame(records)
+        st.write("▶ DEBUG – 원본 컬럼명:", df.columns.tolist())
+
         df.columns = df.columns.str.strip().str.lower()
+        st.write("▶ DEBUG – 정리 후 컬럼명:", df.columns.tolist())
+
         df['timestamp'] = (
             df['timestamp']
             .astype(str)
