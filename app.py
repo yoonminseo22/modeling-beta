@@ -352,8 +352,8 @@ def main_ui():
                 a_int = 1 if a > 0 else -1
 
             st.markdown(f"**정수화된 회귀식:** y = {a_int}x² + {b_int}x + {c_int}")
-            st.markdown(f"Q1. 이차함수의 식을 보고 축의 방정식, 볼록성, 꼭짓점, y절편을 찾아보세요. / Q2. 100만이 되는 시점을 예측해보세요.(Hint:)")
-            st.markdown(f"Q2. 100만이 되는 시점을 예측해보세요.(Hint: 정수화된 이차식 = 1,000,000으로 두고 해 구하기)")
+            st.markdown(f"Q1. 이차함수의 식을 보고 축의 방정식, 볼록성, 꼭짓점, y절편을 찾아보세요.")
+            st.markdown(f"Q2. **100만이 되는 시점**을 예측해보세요.(Hint: 정수화된 이차식 = 1,000,000으로 두고 해 구하기)")
             st.session_state["a"]    = a
             st.session_state["b"]    = b
             st.session_state["c"]    = c
@@ -397,7 +397,7 @@ def main_ui():
                 fig_res, ax_res = plt.subplots(figsize=(6, 3))
                 ax_res.scatter(df['timestamp'], residuals)
                 ax_res.axhline(0, linestyle='--')
-                ax_res.set_xlabel('시간'); ax_res.set_ylabel('잔차차')
+                ax_res.set_xlabel('시간'); ax_res.set_ylabel('잔차')
                 plt.xticks(rotation=45)
                 st.pyplot(fig_res)
 
