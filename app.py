@@ -348,13 +348,41 @@ def main_ui():
                 'y_scaled': y_scaled    # 선택된 세 점의 조회수(만 단위)
             })
 
-            # 6) 세 점(만 단위) 산점도 시각화
+            # 6) 세 점(만 단위) 산점도 및 회귀곡선 시각화 (x축: 시간(시 단위))
+            #    ts_curve_hours: 0부터 전체 x_hours_all 최대값까지 200개 점 (시간 단위)
+            ts_curve_hours = np.linspace(0, x_hours_all.max(), 200)
+            #    y_curve_scaled: 이차 회귀식에 따른 “만 단위” 예측값
+            y_curve_scaled = a * ts_curve_hours**2 + b * ts_curve_hours + c
+
             fig, ax = plt.subplots(figsize=(6, 4))
-            ax.scatter(sel['timestamp'], y_scaled, s=100, color='steelblue', label="선택된 세 점 (만 단위)")
-            ax.set_xlabel('시간')
+            # 실제 전체 데이터 (만 단위) 산점도 (작은 회색 점, x=시간(시))
+            ax.scatter(
+                x_hours_all,
+                df_global['viewcount'] / 10000,
+                s=40,
+                color='lightgray',
+                label="실제 데이터 (만 단위)"
+            )
+            # 선택된 세 점 (만 단위) 산점도 (크고 파란색 점, x=시간(시))
+            elapsed_sel = (sel['timestamp'] - base).dt.total_seconds() / 3600
+            ax.scatter(
+                elapsed_sel,
+                y_scaled,
+                s=100,
+                color='steelblue',
+                label="선택된 세 점 (만 단위)"
+            )
+            # 회귀곡선 (만 단위, x=시간(시))
+            ax.plot(
+                ts_curve_hours,
+                y_curve_scaled,
+                color='orange',
+                lw=2,
+                label="회귀곡선 (만 단위)"
+            )
+            ax.set_xlabel('경과 시간 (시간 단위)')
             ax.set_ylabel('조회수 (단위: 만 회)')
             ax.legend()
-            plt.xticks(rotation=45)
             st.pyplot(fig)
 
             # 7) 그래프 저장 및 다운로드 버튼
