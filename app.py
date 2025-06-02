@@ -312,29 +312,52 @@ def main_ui():
     
         # 그래프 보기 버튼
         if st.button("회귀 분석하기"):
-            # 최적 세 점 선택
+            # 1) 최적 세 점 선택
             candidates = []
             for i, j, k in combinations(range(len(df)), 3):
-                xi, yi = x[[i, j, k]], y[[i, j, k]]
-                a, b, c = np.polyfit(xi, yi, 2)
-                if a <= 0 or (2*a*xi[0] + b) <= 0 or (2*a*xi[2] + b) <= 0:
+                xi, yi = x[[i, j, k]], y[[i, j, k]]  # 여기서 x, y는 원래 초 단위 x와 원단위 y
+                a_tmp, b_tmp, c_tmp = np.polyfit(xi, yi, 2)
+                # 순증가 구간(오름차순) 조건 체크
+                if a_tmp <= 0 or (2 * a_tmp * xi[0] + b_tmp) <= 0 or (2 * a_tmp * xi[2] + b_tmp) <= 0:
                     continue
-                mse = np.mean((yi - (a*xi**2 + b*xi + c))**2)
+                mse = np.mean((yi - (a_tmp * xi**2 + b_tmp * xi + c_tmp))**2)
                 candidates.append((mse, (i, j, k)))
-            idxs = min(candidates, key=lambda v: v[0])[1] if candidates else list(range(min(3, len(df))))
-            sel = df.loc[list(idxs)]
-            y_scaled = sel['viewcount'] / 10000  # (단위: 만 단위)
-            elapsed_seconds = (sel['timestamp'] - base).dt.total_seconds()
-            x_hours = elapsed_seconds / 3600  # 경과 시간(시 단위)
-            a, b, c = np.polyfit(x_hours, y_scaled, 2)
-            st.session_state.update({'a':a, 'b':b, 'c':c})
 
-            # 세 점 시각화
+            # 후보 중 MSE가 가장 작은 세 점 선택 (없으면 그냥 처음 세 점)
+            idxs = min(candidates, key=lambda v: v[0])[1] if candidates else list(range(min(3, len(df))))
+            sel = df.loc[list(idxs)].reset_index(drop=True)
+
+            # 2) y_scaled: 만 단위로 축소
+            y_scaled = sel['viewcount'] / 10000  # 예: 381000 → 38.1 (만 단위)
+
+            # 3) x_hours: 경과 시간(시 단위) 계산
+            elapsed_seconds = (sel['timestamp'] - base).dt.total_seconds()
+            x_hours = elapsed_seconds / 3600  # 예: 3600초 → 1.0 (시 단위)
+
+            # 4) 이차회귀계수 계산 (y_scaled에 대해)
+            a, b, c = np.polyfit(x_hours, y_scaled, 2)
+
+            # 5) session_state에 회귀계수와 기본 변수들 저장
+            st.session_state.update({
+                'a': a,
+                'b': b,
+                'c': c,
+                'base': base,
+                'x_hours': x_hours,     # 회귀에 사용된 x(시간 단위)
+                'y': y,                 # 원본 조회수(원 단위)
+                'y_scaled': y_scaled    # 선택된 세 점의 조회수(만 단위)
+            })
+
+            # 6) 세 점(만 단위) 산점도 시각화
             fig, ax = plt.subplots(figsize=(6, 4))
-            ax.scatter(sel['timestamp'], sel['viewcount'], s=100)
-            ax.set_xlabel('시간'); ax.set_ylabel('조회수(단위:만 회)'); plt.xticks(rotation=45)
+            ax.scatter(sel['timestamp'], y_scaled, s=100, color='steelblue', label="선택된 세 점 (만 단위)")
+            ax.set_xlabel('시간')
+            ax.set_ylabel('조회수 (단위: 만 회)')
+            ax.legend()
+            plt.xticks(rotation=45)
             st.pyplot(fig)
 
+            # 7) 그래프 저장 및 다운로드 버튼
             buf = io.BytesIO()
             fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
             buf.seek(0)
@@ -344,33 +367,29 @@ def main_ui():
                 file_name="regression_plot.png",
                 mime="image/png"
             )
+
+            # 8) 회귀식 출력 (만 단위 기준, 소수점 네 자리로 포맷)
+            str_a = f"{a:.4f}"
+            str_b = f"{b:.4f}"
+            str_c = f"{c:.4f}"
             st.markdown(
-                f"**이차회귀식 (단위: \n"
-                f"- $y$: 실제 조회수 ÷ 10,000 (만 단위)\n"
-                f"- $x$: 경과시간(시간 단위, 기준=base)**\n\n"
-                f"$$y = {a:.3e} \\, x^2 \;+\; {b:.3e} \\, x \;+\; {c:.3e}$$\n\n"
-                f"예를 들어 회귀식에서 $y=100$ (실제 조회수 1,000,000)일 때,\n"
-                f"$x$가 몇 시간이면 되는지를 풀어보세요."
+                f"**이차회귀식 (단위: 만 회 기준)**\n\n"
+                f"- $y$ : 실제 조회수 ÷ 10,000 (만 단위)\n"
+                f"- $x$ : 경과시간 (시간 단위, 기준=base)\n\n"
+                f"$$y(만) = {str_a}\\,x^2 \;+\; {str_b}\\,x \;+\; {str_c}$$\n\n"
+                f"예를 들어, 위 식에서 $y=100$ ($\\equiv$ 실제 조회수 1,000,000)이 되는 $x$를 구하면,\n"
+                f"그 값을 시간(시) 단위로 해석할 수 있습니다."
             )
 
             st.markdown(
                 "**Q1.** 이차함수의 식을 보고 축의 방정식, 볼록성, 꼭짓점, y절편을 찾아보세요.\n\n"
                 "**Q2.** 실제 조회수 1,000,000(만 단위로 100)이 되는 시점을 예측해보세요.\n"
-                "(Hint: 위 회귀식에서 $y=100$인 $x$를 구하면 됩니다. $x$의 단위는 시간(시)입니다.)"
+                "(Hint: 위 회귀식에서 $y=100$인 $x$를 구하면 됩니다. 단위는 시간(시)입니다.)"
             )
-            st.session_state.update({
-                'a': a,
-                'b': b,
-                'c': c,
-                'base': base,
-                'x_hours': x_hours,      # 회귀에 사용한 x(시간 단위)
-                'y': y,                  # 원본 조회수(후속 평가용)
-                'y_scaled': y_scaled     # 축소된 조회수(만 단위)
-            })
 
-            st.session_state["eval_clicked"]   = False
+            # 9) 적합도 평가 및 상세 보기 버튼 상태 초기화
+            st.session_state["eval_clicked"] = False
             st.session_state["detail_clicked"] = False
-
 
         if "a" in st.session_state:
             # 세션에 저장된 계수와 원본 데이터(시간, 조회수)를 꺼낸다
