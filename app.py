@@ -322,13 +322,16 @@ def main_ui():
                 candidates.append((mse, (i, j, k)))
             idxs = min(candidates, key=lambda v: v[0])[1] if candidates else list(range(min(3, len(df))))
             sel = df.loc[list(idxs)]
-            a, b, c = np.polyfit((sel['timestamp'] - base).dt.total_seconds(), sel['viewcount'], 2)
+            y_scaled = sel['viewcount'] / 10000  # (단위: 만 단위)
+            elapsed_seconds = (sel['timestamp'] - base).dt.total_seconds()
+            x_hours = elapsed_seconds / 3600  # 경과 시간(시 단위)
+            a, b, c = np.polyfit(x_hours, y_scaled, 2)
             st.session_state.update({'a':a, 'b':b, 'c':c})
 
             # 세 점 시각화
             fig, ax = plt.subplots(figsize=(6, 4))
             ax.scatter(sel['timestamp'], sel['viewcount'], s=100)
-            ax.set_xlabel('시간'); ax.set_ylabel('조회수'); plt.xticks(rotation=45)
+            ax.set_xlabel('시간'); ax.set_ylabel('조회수(단위:만 회)'); plt.xticks(rotation=45)
             st.pyplot(fig)
 
             buf = io.BytesIO()
@@ -340,64 +343,112 @@ def main_ui():
                 file_name="regression_plot.png",
                 mime="image/png"
             )
-            st.markdown(f"**회귀식:** y = {a:.3e}x² + {b:.3e}x + {c:.3e}")
+            st.markdown(
+                f"**이차회귀식 (단위: \n"
+                f"- $y$: 실제 조회수 ÷ 10,000 (만 단위)\n"
+                f"- $x$: 경과시간(시간 단위, 기준=base)**\n\n"
+                f"$$y = {a:.3e} \\, x^2 \;+\; {b:.3e} \\, x \;+\; {c:.3e}$$\n\n"
+                f"예를 들어 회귀식에서 $y=100$ (실제 조회수 1,000,000)일 때,\n"
+                f"$x$가 몇 시간이면 되는지를 풀어보세요."
+            )
 
-            # 정수화된 회귀식 및 그래프
-            a_int = int(round(a))
-            b_int = int(round(b))
-            c_int = int(round(c))
-
-            # 2) 이차항이 0이 되지 않도록 보정
-            if a_int == 0:
-                a_int = 1 if a > 0 else -1
-
-            st.markdown(f"**정수화된 회귀식:** y = {a_int}x² + {b_int}x + {c_int}")
-            st.markdown(f"Q1. 이차함수의 식을 보고 축의 방정식, 볼록성, 꼭짓점, y절편을 찾아보세요.")
-            st.markdown(f"Q2. **100만이 되는 시점**을 예측해보세요.(Hint: 정수화된 이차식 = 1,000,000으로 두고 해 구하기)")
-            st.session_state["a"]    = a
-            st.session_state["b"]    = b
-            st.session_state["c"]    = c
-            st.session_state["base"] = base
-            st.session_state["x"]    = x
-            st.session_state["y"]    = y
+            st.markdown(
+                "**Q1.** 이차함수의 식을 보고 축의 방정식, 볼록성, 꼭짓점, y절편을 찾아보세요.\n\n"
+                "**Q2.** 실제 조회수 1,000,000(만 단위로 100)이 되는 시점을 예측해보세요.\n"
+                "(Hint: 위 회귀식에서 $y=100$인 $x$를 구하면 됩니다. $x$의 단위는 시간(시)입니다.)"
+            )
+            st.session_state.update({
+                'a': a,
+                'b': b,
+                'c': c,
+                'base': base,
+                'x_hours': x_hours,      # 회귀에 사용한 x(시간 단위)
+                'y': y,                  # 원본 조회수(후속 평가용)
+                'y_scaled': y_scaled     # 축소된 조회수(만 단위)
+            })
 
             st.session_state["eval_clicked"]   = False
             st.session_state["detail_clicked"] = False
 
 
         if "a" in st.session_state:
-            a, b, c   = st.session_state["a"], st.session_state["b"], st.session_state["c"]
-            base, x, y = (st.session_state[k] for k in ("base","x","y"))
+            # 세션에 저장된 계수와 원본 데이터(시간, 조회수)를 꺼낸다
+            a, b, c = st.session_state["a"], st.session_state["b"], st.session_state["c"]
+            base = st.session_state["base"]          # 기준 시점 (datetime)
+            df_global = st.session_state["df"]       # 전체 DataFrame
+            # y는 원본 조회수(단위: 개수), 즉 df_global['viewcount']
+            y_original = st.session_state["y"]       
 
+            # ▶ 회귀할 때 사용했던 x_hours(시간 단위) 배열을 그대로 꺼낸다
+            x_hours_all = st.session_state["x_hours"]  # (sel['timestamp'] - base).dt.total_seconds() / 3600
+
+            # '적합도 평가' 버튼을 누르면 상태 설정
             if st.button("적합도 평가", key="eval_button"):
                 st.session_state["eval_clicked"] = True
 
+            # 'eval_clicked'가 True일 때 계산 시작
             if st.session_state.get("eval_clicked", False):
-                y_pred = a * x**2 + b * x + c
-                mae    = np.mean(np.abs(y - y_pred))
-                rmse   = np.sqrt(np.mean((y - y_pred)**2))
-                mse    = np.mean((y - y_pred)**2)
+                # 세션에서 불러올 변수
+                a = st.session_state["a"]                # 회귀 계수 a
+                b = st.session_state["b"]                # 회귀 계수 b
+                c = st.session_state["c"]                # 회귀 계수 c
+                base = st.session_state["base"]          # 기준 시점(datetime)
+                df_global = st.session_state["df"]       # 전체 DataFrame
+                y_original = st.session_state["y"]       # 원본 조회수(원 단위)
 
-                st.write(f"**평균절대오차(MAE):** {mae:,.2f}")
-                st.write(f"**제곱근평균제곱오차(RMSE):** {rmse:,.2f}")
-                st.write(f"**평균제곱오차(MSE):** {mse:,.2f}")
+                # ▶ 회귀에 사용했던 x_hours(시간 단위) 배열을 그대로 꺼낸다
+                x_hours_all = st.session_state["x_hours"]  
+                # 예: [0.0, 2.5, 5.0, …] (단위: 시간)
 
-                mean_views = y.mean()
-                mae_ratio = mae / mean_views * 100
-                st.write(f"📊 MAE/평균 조회수 비율: {mae_ratio:.2f}%")
+                # 1) 예측값 계산하기
+                #    time_poly(x_hours_all) → y_scaled (만 단위 예측값)
+                #    실제 예측값(원 단위) = y_scaled * 10000
+                time_poly = np.poly1d([a, b, c])
+                y_pred_scaled = time_poly(x_hours_all)        # 만 단위 예측값
+                y_pred = y_pred_scaled * 10000               # 원 단위 예측값
 
-                data_range = y.max() - y.min()
-                mae_range = mae / data_range * 100
-                st.write(f"📊 MAE/범위 비율: {mae_range:.2f}%")
+                # 2) 오차 계산하기(잔차)
+                #    오차 = 실제값(y_original) - 예측값(y_pred)
+                errors = y_original - y_pred
 
-                mape = np.mean(np.abs((y - y_pred) / y)) * 100
-                st.write(f"📊 평균절대백분율오차(MAPE): {mape:.2f}%")
+                # 3) MAE(평균절대오차) 구하기
+                abs_errors = np.abs(errors)                   # 절댓값 오차
+                MAE = np.mean(abs_errors)
+                st.write(f"· 평균절대오차(MAE): {MAE:,.2f}")
 
-                residuals = y - y_pred
+                # 4) MSE, RMSE 구하기
+                sq_errors = errors**2                         # 제곱 오차
+                MSE = np.mean(sq_errors)
+                RMSE = np.sqrt(MSE)
+                st.write(f"· 평균제곱오차(MSE): {MSE:,.2f}")
+                st.write(f"· 제곱근평균제곱오차(RMSE): {RMSE:,.2f}")
+
+                # 5) MAE를 평균 조회수와 비교해 보기 (백분율)
+                mean_views = y_original.mean()
+                MAE_ratio = MAE / mean_views * 100
+                st.write(f"· MAE / 평균 조회수 비율: {MAE_ratio:.2f}%")
+
+                # 6) MAE를 데이터 범위와 비교해 보기 (백분율)
+                data_range = y_original.max() - y_original.min()
+                MAE_range_ratio = MAE / data_range * 100
+                st.write(f"· MAE / 데이터 범위 비율: {MAE_range_ratio:.2f}%")
+
+                # 7) MAPE(평균절대백분율오차) 구하기
+                #    y_original이 0인 경우 분모가 0이 되므로, 예외 처리
+                mask = y_original > 0
+                pct_errors = np.abs((y_original[mask] - y_pred[mask]) / y_original[mask]) * 100
+                MAPE = np.mean(pct_errors)
+                st.write(f"· 평균절대백분율오차(MAPE): {MAPE:.2f}%")
+
+                # 8) 잔차(residual) 그래프 그리기
+                residuals = errors   # 이미 계산한 오차와 동일
+
                 fig_res, ax_res = plt.subplots(figsize=(6, 3))
-                ax_res.scatter(df['timestamp'], residuals)
-                ax_res.axhline(0, linestyle='--')
-                ax_res.set_xlabel('시간'); ax_res.set_ylabel('잔차')
+                # x축: 실제 timestamp, y축: 잔차(원단위)
+                ax_res.scatter(df_global['timestamp'], residuals, s=15)
+                ax_res.axhline(0, linestyle='--', color='gray')
+                ax_res.set_xlabel('시간')
+                ax_res.set_ylabel('잔차 (실제조회수 − 예측조회수)')
                 plt.xticks(rotation=45)
                 st.pyplot(fig_res)
 
@@ -405,24 +456,45 @@ def main_ui():
                 st.session_state["detail_clicked"] = True
 
             if st.session_state.get("detail_clicked", False):
-                ts_curve = np.linspace(0, x.max(), 200)
+                # 1) 회귀에 사용한 x_hours(시간 단위) 배열을 가져온다
+                x_hours_all = st.session_state["x_hours"]   # (timestamp – base).dt.total_seconds() / 3600
+                # 2) ts_curve: 0부터 x_hours_all.max()까지 200개 점을 생성 (시간 단위)
+                ts_curve = np.linspace(0, x_hours_all.max(), 200)
+
                 fig2, ax2 = plt.subplots(figsize=(6, 4))
-                ax2.scatter(df['timestamp'], y, alpha=0.5)
-                ax2.plot(
-                    base + pd.to_timedelta(ts_curve, 's'),
-                    a*ts_curve**2 + b*ts_curve + c
-                )
-                ax2.set_xlabel('시간'); ax2.set_ylabel('조회수')
+
+                # 3) 실제 데이터 산점도 (원본 timestamp vs 원본 viewcount)
+                #    df에는 ['timestamp'], y_original (원본 조회수) 가 있다고 가정
+                df_global = st.session_state["df"]
+                y_original = st.session_state["y"]
+                ax2.scatter(df_global['timestamp'], y_original, alpha=0.5, label="실제 조회수")
+
+                # 4) 모델 곡선: ts_curve(시 단위)를 초 단위로 변환해서 timestamp 계산
+                base = st.session_state["base"]
+                a, b, c = st.session_state["a"], st.session_state["b"], st.session_state["c"]
+                # 회귀식으로 예측된 y_scaled (만 단위)
+                y_curve_scaled = a * ts_curve**2 + b * ts_curve + c
+                # 실제 조회수 단위로 환산 (만 단위 → 원 단위)
+                y_curve = y_curve_scaled * 10000
+
+                # x_curve_timestamp: base + (ts_curve 시 단위 → 초 단위) 
+                x_curve_timestamp = base + pd.to_timedelta(ts_curve * 3600, unit='s')
+                ax2.plot(x_curve_timestamp, y_curve, color='red', linewidth=2, label="회귀 곡선")
+
+                ax2.set_xlabel('시간')
+                ax2.set_ylabel('조회수')
+                ax2.legend()
                 plt.xticks(rotation=45)
                 st.pyplot(fig2)
 
+                # 5) 다운로드 버튼 (원단위 곡선 그래프)
                 buf1 = io.BytesIO()
                 fig2.savefig(buf1, format='png', dpi=150, bbox_inches='tight')
                 buf1.seek(0)
                 st.download_button(
                     label="📷 실제 데이터 그래프 다운로드",
                     data=buf1,
-                    file_name="rea_data_plot.png",
+                    file_name="real_data_plot_scaled.png",
                     mime="image/png"
                 )
             
@@ -480,96 +552,147 @@ def main_ui():
 
                 st.success("의견과 요약이 시트에 저장되었습니다!")
 
-
-
-    elif step==3 and all(k in st.session_state for k in ('a','b','c')):
+    elif step == 3 and all(k in st.session_state for k in ('a','b','c')):
+        # 제목 및 질문
         step_header(
             "2️⃣-2️⃣ γ(광고효과) 시뮬레이션",
             "광고비 투입에 따른 조회수 증가를 실험해보세요",
             ["γ 값은 어떻게 해석할까?", "만약 광고비를 두 배로 늘린다면?", "광고비가 효율적일 조건은?"]
         )
+
+        # 1) 회귀 계수 불러오기 (a, b, c 모두 “시간(시)” / “만 단위” 기준)
         a, b, c = st.session_state['a'], st.session_state['b'], st.session_state['c']
         time_poly = np.poly1d([a, b, c])
 
-        # 광고비 및 γ 입력 (1만 원 단위)
+        # 2) 광고비 및 γ 입력 (1만 원 단위)
         budget = st.number_input(
             "투입할 광고비를 입력하세요 (원)",
-            min_value=0,
-            step=10000,
-            value=1000000
+            min_value=0, step=10000, value=1000000, format="%d"
         )
         gamma = st.slider(
-            "광고효과 계수 γ 설정",
-            min_value=0.0,
-            max_value=5.0,
-            value=0.5
+            "광고효과 계수 γ 설정 (1만 원당 추가 조회수)",
+            min_value=0.0, max_value=20.0, value=2.0, step=0.1
         )
+        # γ=2라면 “광고비 1만 원당 조회수 +2회”(만 단위 아님, 실제 회수)
 
-        # 예측 시점 값 계산
-        x_now      = x[-1]
-        t_now      = base + pd.to_timedelta(x_now, 's')
-        y_time_now = time_poly(x_now)
+        # 3) 현재까지 마지막으로 기록된 “경과시간(시간 단위)”과 대응 timestamp 계산
+        #    st.session_state["x_hours"]는 (timestamp – base).dt.total_seconds()/3600 형태
+        x_hours_all = st.session_state["x_hours"]
+        x_now = x_hours_all.iloc[-1]                           # 마지막 시점(시간 단위)
+        base = st.session_state["base"]                        # 기준 시점(datetime)
+        # 시각화나 출력용 timestamp: x_now(시간) → 초로 변환
+        t_now = base + pd.to_timedelta(x_now * 3600, unit='s')  
 
-        # 광고비 단위 계산 (1만 원을 1단위로 본다)
-        unit  = 10000
-        units = budget // unit
-        y_ad  = gamma * units
-        y_total = y_time_now + y_ad
+        # 4) 시간 모델에 의한 예측값(만 단위) → 실제 조회수(원 단위)로 환산
+        y_time_scaled = time_poly(x_now)                        # “만 단위 예측값”
+        y_time_now = int(round(y_time_scaled * 10000))          # “원 단위 예측값”
 
-        # 결과 출력
-        st.write(f"▶️ 시간 모델 예측 조회수: **{int(y_time_now):,}회**")
-        st.write(f"▶️ 광고비 효과 조회수: **{int(y_ad):,}회** (γ×{units})")
-        st.write(f"▶️ **통합 예측 조회수:** **{int(y_total):,}회**")
+        # 5) 광고효과 계산: 
+        unit_won = 10000                                        # 1만 원을 1단위로 봄
+        units = budget // unit_won                              # 지출한 만 원 단위 수
+        y_ad = int(round(gamma * units))                        # 실제 ‘추가 조회수(원 단위)’
+        #    ex) γ=2, budget=100만 → units=100 → y_ad=2×100=200회
 
-        # 시각화
-        fig2, ax2 = plt.subplots(figsize=(8,4))
-        ax2.scatter(df['timestamp'], y, alpha=0.5, label="실제 조회수")
-        ts_curve = np.linspace(0, x_now, 200)
+        # 6) 광고효과 반영 후 현재 통합 예측 조회수
+        y_total_now = y_time_now + y_ad                         # (원 단위)
+
+        # 7) 결과 출력
+        st.write(f"▶️ 시간 모델 예측 조회수 (광고 없음, 원 단위): **{y_time_now:,}회**")
+        st.write(f"▶️ 광고비 효과 조회수 (현재 시점, 원 단위): **+{y_ad:,}회** (γ×{units})")
+        st.write(f"▶️ **통합 예측 조회수 (현재 시점, 원 단위):** **{y_total_now:,}회**")
+
+        # 8) 시각화
+        fig2, ax2 = plt.subplots(figsize=(8, 4))
+
+        # 8-1) 실제 데이터 산점도 (원본 조회수: 원 단위)
+        df_global = st.session_state["df"]
+        y_original = st.session_state["y"]
+        ax2.scatter(df_global['timestamp'], y_original, alpha=0.5, label="실제 조회수")
+
+        # 8-2) 회귀곡선: ts_curve_hours(0~x_now), 만 단위 예측 → 실제 조회수(원)로 환산
+        ts_curve_hours = np.linspace(0, x_now, 200)              # 시간(시) 범위
+        y_curve_scaled = time_poly(ts_curve_hours)              # 만 단위 예측값
+        y_curve = y_curve_scaled * 10000                        # 원 단위 예측값
+        x_curve_timestamp = base + pd.to_timedelta(ts_curve_hours * 3600, unit='s')
         ax2.plot(
-            base + pd.to_timedelta(ts_curve, 's'),
-            time_poly(ts_curve),
-            color="orange", lw=2, label="시간 모델 곡선"
+            x_curve_timestamp,
+            y_curve,
+            color="orange", lw=2, linestyle="--",
+            label="시간 모델 (광고 없음)"
         )
+
+        # 8-3) 광고효과를 동일하게 더한 곡선 (원 단위)
+        y_curve_with_ad = y_curve + y_ad                          # “각 시점마다 +광고효과”
+        ax2.plot(
+            x_curve_timestamp,
+            y_curve_with_ad,
+            color="red", lw=2,
+            label="시간 모델 + 광고 효과"
+        )
+
+        # 8-4) 현재 시점 예측점 표시
         ax2.scatter(
             t_now, y_time_now,
-            color="green", s=80, label="시간 모델 예측점"
+            color="green", s=80,
+            label="시간 모델 예측 (광고 없음)"
         )
         ax2.scatter(
-            t_now, y_total,
-            color="red", s=100, label="광고비 적용 예측점"
+            t_now, y_total_now,
+            color="red", s=100,
+            label="광고 적용 예측점 (원 단위)"
         )
+
         ax2.set_xlabel("시간")
-        ax2.set_ylabel("조회수")
+        ax2.set_ylabel("조회수 (원 단위)")
         ax2.legend()
         plt.xticks(rotation=45)
         st.pyplot(fig2)
 
+        # 9) 그래프 다운로드 버튼
         buf2 = io.BytesIO()
         fig2.savefig(buf2, format='png', dpi=150, bbox_inches='tight')
         buf2.seek(0)
         st.download_button(
             label="📷 광고비 적용 그래프 다운로드",
             data=buf2,
-            file_name="budget_plot.png",
+            file_name="budget_plot_with_ad_updated.png",
             mime="image/png"
         )
 
+        # 10) γ(감마) 계수 해설서
         with st.expander("📖 γ(감마) 계수(광고효과)란?"):
             st.markdown("""
-            - **γ(감마) 계수**: 광고비 1만 원을 썼을 때 늘어나는 조회수를 나타내는 숫자예요.  
-            예를 들어 γ=2라면, 광고비 1만 원당 조회수가 2회씩 늘어난다는 뜻이죠.
-
-            - **왜 1만 원 단위일까?**  
-            너무 큰 단위(100만 원)보다 작은 단위(1만 원)로 나누면 계산하기 쉽고,  
-            학생들도 `광고비 / 10,000`을 통해 늘어날 조회수를 바로 구해볼 수 있어요.
-
-            - **간단 모형**:  
-            ```
-            조회수_증가 = γ × (광고비 ÷ 10,000)
-            ```
-            - 광고비를 10만 원 썼을 때(=10×10,000), γ=3이면  
-                조회수_증가 = 3 × 10 = 30회
+            - **γ(감마) 계수**:  
+            - 광고비 **1만 원**을 투입했을 때 실제로 늘어나는 조회수를 의미합니다.  
+            - 예를 들어, γ=2라면 ‘광고비 1만 원당 조회수 +2회’가 된다는 뜻입니다.  
+            - 즉, γ × (광고비 ÷ 10,000) = 광고로 얻은 추가 조회수 (원 단위)
+            
+            - **왜 모든 시점에 광고효과를 더했을까?**  
+            - 실제로 광고를 한 번 집행하면 그 시점 이후에도 노출이 이어지므로,  
+                ‘광고 투입 시점 이후의 모든 예측 시간대’에 조회수가 높아집니다.  
+            - 따라서 **광고 투입 시점 이후 전체 곡선**에 동일하게 조회수(원 단위)를 더해 주면,  
+                학생들이 ‘광고가 곧바로 곡선을 위로 밀어 올린다’는 개념을 시각적으로 이해하기 쉽습니다.
+            
+            - **코드 해석 예시**:  
+            1. γ=3, 광고비=50만 원 → units=50 → y_ad=3×50=150회 (원 단위)  
+            2. 시간 모델에서 현재 시점 예측이 20,000회라면  
+                – 광고 없음 예측 : 20,000회  
+                – 광고 있음 예측 : 20,000 + 150 = 20,150회  
+            3. 예를 들어 1시간 뒤 예측(광고 없음)이 21,000회라면  
+                – 광고 있음 예측 : 21,000 + 150 = 21,150회
+            
+            - **만약 광고비를 두 배로 늘린다면?**  
+            1. γ=2, 광고비=100만 원 → units=100 → y_ad=2×100=200회  
+                → 추가 조회수도 두 배 증가  
+            2. 시간 모델 곡선이 이전 대비 더 높게 올라가므로,  
+                곡선 간격을 비교하며 광고비 효율을 분석할 수 있습니다.
+            
+            - **광고비 효율적 조건**:  
+            - ‘광고 한 단위(1만 원)당 조회수 증가량(γ)’이 높을수록 효율이 좋습니다.  
+            - 현실적으로 γ가 너무 높으면 비현실적이므로, 일정 이상 광고비를 늘려도  
+                증가폭이 작아지는 **감쇠형 모델(예: 로그 함수)**을 추가로 고려할 수 있습니다.
             """)
+
 
     elif step==4:
         step_header("3️⃣ 토의 내용 입력 & 요약하기",
