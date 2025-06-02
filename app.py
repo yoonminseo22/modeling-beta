@@ -391,15 +391,23 @@ def main_ui():
             st.session_state["eval_clicked"] = False
             st.session_state["detail_clicked"] = False
 
-    if "a" in st.session_state:
-        # 2-a) 세션에서 필요한 값 불러오기
+    if "a" in st.session_state and "df" in st.session_state and "base" in st.session_state:
+        # 2-a) 세션에서 필요한 값 불러오기 (없는 경우 기본값으로 계산)
         a = st.session_state["a"]
         b = st.session_state["b"]
         c = st.session_state["c"]
         base = st.session_state["base"]
         df_global = st.session_state["df"]
-        y_original = st.session_state["y_original"]      # 전체 원단위 조회수 (벡터, 길이 N)
-        x_hours_all = st.session_state["x_hours_all"]    # 전체 시간(시 단위) (벡터, 길이 N)
+
+        # y_original: 세션에 있으면 그대로, 없으면 df_global에서 추출
+        y_original = st.session_state.get("y_original", df_global['viewcount'].values)
+
+        # x_hours_all: 세션에 있으면 그대로, 없으면 df_global에서 계산
+        if "x_hours_all" in st.session_state:
+            x_hours_all = st.session_state["x_hours_all"]
+        else:
+            elapsed_all = (df_global['timestamp'] - base).dt.total_seconds()
+            x_hours_all = elapsed_all / 3600
 
         # 2-b) ‘적합도 평가’ 버튼
         if st.button("적합도 평가", key="eval_button"):
