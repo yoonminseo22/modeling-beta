@@ -452,7 +452,7 @@ def main_ui():
             ax_res.legend()
             plt.xticks(rotation=45)
             st.pyplot(fig_res)
-            
+
             if st.button("실제 데이터 더 확인하기", key="detail_button"):
                 st.session_state["detail_clicked"] = True
 
