@@ -391,75 +391,75 @@ def main_ui():
             st.session_state["eval_clicked"] = False
             st.session_state["detail_clicked"] = False
 
-    if "a" in st.session_state and "df" in st.session_state and "base" in st.session_state:
-        # 2-a) 세션에서 필요한 값 불러오기 (없는 경우 기본값으로 계산)
-        a = st.session_state["a"]
-        b = st.session_state["b"]
-        c = st.session_state["c"]
-        base = st.session_state["base"]
-        df_global = st.session_state["df"]
+        if "a" in st.session_state and "df" in st.session_state and "base" in st.session_state:
+            # 2-a) 세션에서 필요한 값 불러오기 (없는 경우 기본값으로 계산)
+            a = st.session_state["a"]
+            b = st.session_state["b"]
+            c = st.session_state["c"]
+            base = st.session_state["base"]
+            df_global = st.session_state["df"]
 
-        # y_original: 세션에 있으면 그대로, 없으면 df_global에서 추출
-        y_original = st.session_state.get("y_original", df_global['viewcount'].values)
+            # y_original: 세션에 있으면 그대로, 없으면 df_global에서 추출
+            y_original = st.session_state.get("y_original", df_global['viewcount'].values)
 
-        # x_hours_all: 세션에 있으면 그대로, 없으면 df_global에서 계산
-        if "x_hours_all" in st.session_state:
-            x_hours_all = st.session_state["x_hours_all"]
-        else:
-            elapsed_all = (df_global['timestamp'] - base).dt.total_seconds()
-            x_hours_all = elapsed_all / 3600
+            # x_hours_all: 세션에 있으면 그대로, 없으면 df_global에서 계산
+            if "x_hours_all" in st.session_state:
+                x_hours_all = st.session_state["x_hours_all"]
+            else:
+                elapsed_all = (df_global['timestamp'] - base).dt.total_seconds()
+                x_hours_all = elapsed_all / 3600
 
-        # 2-b) ‘적합도 평가’ 버튼
-        if st.button("적합도 평가", key="eval_button"):
-            st.session_state["eval_clicked"] = True
+            # 2-b) ‘적합도 평가’ 버튼
+            if st.button("적합도 평가", key="eval_button"):
+                st.session_state["eval_clicked"] = True
 
-        # 2-c) ‘eval_clicked’가 True인 경우 계산 및 출력
-        if st.session_state.get("eval_clicked", False):
-            # 2-c-1) 전체 예측값(만 단위) → 전체 예측값(원 단위) 벡터 생성
-            time_poly     = np.poly1d([a, b, c])
-            y_pred_scaled = time_poly(x_hours_all)      # 만 단위 예측값 (길이 N)
-            y_pred        = y_pred_scaled * 10000       # 원 단위 예측값 (길이 N)
+            # 2-c) ‘eval_clicked’가 True인 경우 계산 및 출력
+            if st.session_state.get("eval_clicked", False):
+                # 2-c-1) 전체 예측값(만 단위) → 전체 예측값(원 단위) 벡터 생성
+                time_poly     = np.poly1d([a, b, c])
+                y_pred_scaled = time_poly(x_hours_all)      # 만 단위 예측값 (길이 N)
+                y_pred        = y_pred_scaled * 10000       # 원 단위 예측값 (길이 N)
 
-            # 2-c-2) 오차(errors) 계산 (길이 N 벡터)
-            errors = y_original - y_pred
+                # 2-c-2) 오차(errors) 계산 (길이 N 벡터)
+                errors = y_original - y_pred
 
-            # 2-c-3) MAE 계산
-            abs_errors = np.abs(errors)
-            MAE = np.mean(abs_errors)
-            st.write(f"· 평균절대오차(MAE): {MAE:,.2f}")
+                # 2-c-3) MAE 계산
+                abs_errors = np.abs(errors)
+                MAE = np.mean(abs_errors)
+                st.write(f"· 평균절대오차(MAE): {MAE:,.2f}")
 
-            # 2-c-4) MSE, RMSE 계산
-            sq_errors = errors**2
-            MSE = np.mean(sq_errors)
-            RMSE = np.sqrt(MSE)
-            st.write(f"· 평균제곱오차(MSE): {MSE:,.2f}")
-            st.write(f"· 제곱근평균제곱오차(RMSE): {RMSE:,.2f}")
+                # 2-c-4) MSE, RMSE 계산
+                sq_errors = errors**2
+                MSE = np.mean(sq_errors)
+                RMSE = np.sqrt(MSE)
+                st.write(f"· 평균제곱오차(MSE): {MSE:,.2f}")
+                st.write(f"· 제곱근평균제곱오차(RMSE): {RMSE:,.2f}")
 
-            # 2-c-5) MAE / 평균 조회수 비율
-            mean_views = y_original.mean()
-            MAE_ratio = MAE / mean_views * 100
-            st.write(f"· MAE / 평균 조회수 비율: {MAE_ratio:.2f}%")
+                # 2-c-5) MAE / 평균 조회수 비율
+                mean_views = y_original.mean()
+                MAE_ratio = MAE / mean_views * 100
+                st.write(f"· MAE / 평균 조회수 비율: {MAE_ratio:.2f}%")
 
-            # 2-c-6) MAE / 데이터 범위 비율
-            data_range = y_original.max() - y_original.min()
-            MAE_range_ratio = MAE / data_range * 100
-            st.write(f"· MAE / 데이터 범위 비율: {MAE_range_ratio:.2f}%")
+                # 2-c-6) MAE / 데이터 범위 비율
+                data_range = y_original.max() - y_original.min()
+                MAE_range_ratio = MAE / data_range * 100
+                st.write(f"· MAE / 데이터 범위 비율: {MAE_range_ratio:.2f}%")
 
-            # 2-c-7) MAPE 계산 (원단위)
-            mask = y_original > 0
-            pct_errors = np.abs((y_original[mask] - y_pred[mask]) / y_original[mask]) * 100
-            MAPE = np.mean(pct_errors)
-            st.write(f"· 평균절대백분율오차(MAPE): {MAPE:.2f}%")
+                # 2-c-7) MAPE 계산 (원단위)
+                mask = y_original > 0
+                pct_errors = np.abs((y_original[mask] - y_pred[mask]) / y_original[mask]) * 100
+                MAPE = np.mean(pct_errors)
+                st.write(f"· 평균절대백분율오차(MAPE): {MAPE:.2f}%")
 
-            # 2-c-8) 잔차(residual) 그래프 그리기
-            fig_res, ax_res = plt.subplots(figsize=(6, 3))
-            ax_res.scatter(df_global['timestamp'], errors, s=15, color='purple', label="잔차 (원 단위)")
-            ax_res.axhline(0, linestyle='--', color='gray')
-            ax_res.set_xlabel('시간')
-            ax_res.set_ylabel('잔차 (실제 조회수 − 예측 조회수)')
-            ax_res.legend()
-            plt.xticks(rotation=45)
-            st.pyplot(fig_res)
+                # 2-c-8) 잔차(residual) 그래프 그리기
+                fig_res, ax_res = plt.subplots(figsize=(6, 3))
+                ax_res.scatter(df_global['timestamp'], errors, s=15, color='purple', label="잔차 (원 단위)")
+                ax_res.axhline(0, linestyle='--', color='gray')
+                ax_res.set_xlabel('시간')
+                ax_res.set_ylabel('잔차 (실제 조회수 − 예측 조회수)')
+                ax_res.legend()
+                plt.xticks(rotation=45)
+                st.pyplot(fig_res)
 
             if st.button("실제 데이터 더 확인하기", key="detail_button"):
                 st.session_state["detail_clicked"] = True
