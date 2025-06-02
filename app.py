@@ -391,87 +391,68 @@ def main_ui():
             st.session_state["eval_clicked"] = False
             st.session_state["detail_clicked"] = False
 
-        if "a" in st.session_state:
-            # 세션에 저장된 계수와 원본 데이터(시간, 조회수)를 꺼낸다
-            a, b, c = st.session_state["a"], st.session_state["b"], st.session_state["c"]
-            base = st.session_state["base"]          # 기준 시점 (datetime)
-            df_global = st.session_state["df"]       # 전체 DataFrame
-            # y는 원본 조회수(단위: 개수), 즉 df_global['viewcount']
-            y_original = st.session_state["y"]       
+    if "a" in st.session_state:
+        # 2-a) 세션에서 필요한 값 불러오기
+        a = st.session_state["a"]
+        b = st.session_state["b"]
+        c = st.session_state["c"]
+        base = st.session_state["base"]
+        df_global = st.session_state["df"]
+        y_original = st.session_state["y_original"]      # 전체 원단위 조회수 (벡터, 길이 N)
+        x_hours_all = st.session_state["x_hours_all"]    # 전체 시간(시 단위) (벡터, 길이 N)
 
-            # ▶ 회귀할 때 사용했던 x_hours(시간 단위) 배열을 그대로 꺼낸다
-            x_hours_all = st.session_state["x_hours"]  # (sel['timestamp'] - base).dt.total_seconds() / 3600
+        # 2-b) ‘적합도 평가’ 버튼
+        if st.button("적합도 평가", key="eval_button"):
+            st.session_state["eval_clicked"] = True
 
-            # '적합도 평가' 버튼을 누르면 상태 설정
-            if st.button("적합도 평가", key="eval_button"):
-                st.session_state["eval_clicked"] = True
+        # 2-c) ‘eval_clicked’가 True인 경우 계산 및 출력
+        if st.session_state.get("eval_clicked", False):
+            # 2-c-1) 전체 예측값(만 단위) → 전체 예측값(원 단위) 벡터 생성
+            time_poly     = np.poly1d([a, b, c])
+            y_pred_scaled = time_poly(x_hours_all)      # 만 단위 예측값 (길이 N)
+            y_pred        = y_pred_scaled * 10000       # 원 단위 예측값 (길이 N)
 
-            # 'eval_clicked'가 True일 때 계산 시작
-            if st.session_state.get("eval_clicked", False):
-                # 세션에서 불러올 변수
-                a = st.session_state["a"]                # 회귀 계수 a
-                b = st.session_state["b"]                # 회귀 계수 b
-                c = st.session_state["c"]                # 회귀 계수 c
-                base = st.session_state["base"]          # 기준 시점(datetime)
-                df_global = st.session_state["df"]       # 전체 DataFrame
-                y_original = st.session_state["y"]       # 원본 조회수(원 단위)
+            # 2-c-2) 오차(errors) 계산 (길이 N 벡터)
+            errors = y_original - y_pred
 
-                # ▶ 회귀에 사용했던 x_hours(시간 단위) 배열을 그대로 꺼낸다
-                x_hours_all = st.session_state["x_hours"]  
-                # 예: [0.0, 2.5, 5.0, …] (단위: 시간)
+            # 2-c-3) MAE 계산
+            abs_errors = np.abs(errors)
+            MAE = np.mean(abs_errors)
+            st.write(f"· 평균절대오차(MAE): {MAE:,.2f}")
 
-                # 1) 예측값 계산하기
-                #    time_poly(x_hours_all) → y_scaled (만 단위 예측값)
-                #    실제 예측값(원 단위) = y_scaled * 10000
-                time_poly = np.poly1d([a, b, c])
-                y_pred_scaled = time_poly(x_hours_all)        # 만 단위 예측값
-                y_pred = y_pred_scaled * 10000               # 원 단위 예측값
+            # 2-c-4) MSE, RMSE 계산
+            sq_errors = errors**2
+            MSE = np.mean(sq_errors)
+            RMSE = np.sqrt(MSE)
+            st.write(f"· 평균제곱오차(MSE): {MSE:,.2f}")
+            st.write(f"· 제곱근평균제곱오차(RMSE): {RMSE:,.2f}")
 
-                # 2) 오차 계산하기(잔차)
-                #    오차 = 실제값(y_original) - 예측값(y_pred)
-                errors = y_original - y_pred
+            # 2-c-5) MAE / 평균 조회수 비율
+            mean_views = y_original.mean()
+            MAE_ratio = MAE / mean_views * 100
+            st.write(f"· MAE / 평균 조회수 비율: {MAE_ratio:.2f}%")
 
-                # 3) MAE(평균절대오차) 구하기
-                abs_errors = np.abs(errors)                   # 절댓값 오차
-                MAE = np.mean(abs_errors)
-                st.write(f"· 평균절대오차(MAE): {MAE:,.2f}")
+            # 2-c-6) MAE / 데이터 범위 비율
+            data_range = y_original.max() - y_original.min()
+            MAE_range_ratio = MAE / data_range * 100
+            st.write(f"· MAE / 데이터 범위 비율: {MAE_range_ratio:.2f}%")
 
-                # 4) MSE, RMSE 구하기
-                sq_errors = errors**2                         # 제곱 오차
-                MSE = np.mean(sq_errors)
-                RMSE = np.sqrt(MSE)
-                st.write(f"· 평균제곱오차(MSE): {MSE:,.2f}")
-                st.write(f"· 제곱근평균제곱오차(RMSE): {RMSE:,.2f}")
+            # 2-c-7) MAPE 계산 (원단위)
+            mask = y_original > 0
+            pct_errors = np.abs((y_original[mask] - y_pred[mask]) / y_original[mask]) * 100
+            MAPE = np.mean(pct_errors)
+            st.write(f"· 평균절대백분율오차(MAPE): {MAPE:.2f}%")
 
-                # 5) MAE를 평균 조회수와 비교해 보기 (백분율)
-                mean_views = y_original.mean()
-                MAE_ratio = MAE / mean_views * 100
-                st.write(f"· MAE / 평균 조회수 비율: {MAE_ratio:.2f}%")
-
-                # 6) MAE를 데이터 범위와 비교해 보기 (백분율)
-                data_range = y_original.max() - y_original.min()
-                MAE_range_ratio = MAE / data_range * 100
-                st.write(f"· MAE / 데이터 범위 비율: {MAE_range_ratio:.2f}%")
-
-                # 7) MAPE(평균절대백분율오차) 구하기
-                #    y_original이 0인 경우 분모가 0이 되므로, 예외 처리
-                mask = y_original > 0
-                pct_errors = np.abs((y_original[mask] - y_pred[mask]) / y_original[mask]) * 100
-                MAPE = np.mean(pct_errors)
-                st.write(f"· 평균절대백분율오차(MAPE): {MAPE:.2f}%")
-
-                # 8) 잔차(residual) 그래프 그리기
-                residuals = errors   # 이미 계산한 오차와 동일
-
-                fig_res, ax_res = plt.subplots(figsize=(6, 3))
-                # x축: 실제 timestamp, y축: 잔차(원단위)
-                ax_res.scatter(df_global['timestamp'], residuals, s=15)
-                ax_res.axhline(0, linestyle='--', color='gray')
-                ax_res.set_xlabel('시간')
-                ax_res.set_ylabel('잔차 (실제조회수 − 예측조회수)')
-                plt.xticks(rotation=45)
-                st.pyplot(fig_res)
-
+            # 2-c-8) 잔차(residual) 그래프 그리기
+            fig_res, ax_res = plt.subplots(figsize=(6, 3))
+            ax_res.scatter(df_global['timestamp'], errors, s=15, color='purple', label="잔차 (원 단위)")
+            ax_res.axhline(0, linestyle='--', color='gray')
+            ax_res.set_xlabel('시간')
+            ax_res.set_ylabel('잔차 (실제 조회수 − 예측 조회수)')
+            ax_res.legend()
+            plt.xticks(rotation=45)
+            st.pyplot(fig_res)
+            
             if st.button("실제 데이터 더 확인하기", key="detail_button"):
                 st.session_state["detail_clicked"] = True
 
