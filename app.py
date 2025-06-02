@@ -337,6 +337,9 @@ def main_ui():
             # 4) 이차회귀계수 계산 (y_scaled에 대해)
             a, b, c = np.polyfit(x_hours, y_scaled, 2)
 
+            elapsed_all = (df['timestamp'] - base).dt.total_seconds()
+            x_hours_all = elapsed_all / 3600
+
             # 5) session_state에 회귀계수와 기본 변수들 저장
             st.session_state.update({
                 'a': a,
@@ -349,6 +352,7 @@ def main_ui():
             })
 
             # 6) 세 점(만 단위) 산점도 및 회귀곡선 시각화 (x축: 시간(시 단위))
+            x_hours_all = st.session_state["x_hours_all"]
             #    ts_curve_hours: 0부터 전체 x_hours_all 최대값까지 200개 점 (시간 단위)
             ts_curve_hours = np.linspace(0, x_hours_all.max(), 200)
             #    y_curve_scaled: 이차 회귀식에 따른 “만 단위” 예측값
