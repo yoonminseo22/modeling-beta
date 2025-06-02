@@ -272,6 +272,7 @@ def main_ui():
         df['viewcount'] = df['viewcount'].astype(int)
         df = df.sort_values('timestamp').reset_index(drop=True)
 
+        st.session_state["df"] = df
         base = df['timestamp'].min()
         x = (df['timestamp'] - base).dt.total_seconds().values
         y = df['viewcount'].values
