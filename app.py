@@ -285,19 +285,22 @@ def main_ui():
     if step==1:
         step_header("1️⃣ 유튜브 조회수 기록하기", ["실제 유튜브 영상 조회수 데이터를 선정하고 이차함수 회귀분석의 필요성을 이해한다.", "조회수 데이터를 수집하기 위한 기준을 설정하고 협력적으로 영상을 선정한다."],
                     ["그냥 점을 이어서 예측하면 정확할까? 왜 정확하지 않을까?", "정확한 예측을 하려면 무엇이 필요할까?", "회귀 분석이란 무엇일까? 왜 중요한 걸까?","그래프 형태가 왜 직선이 아닌 곡선으로 나타날까?","왜 현실의 데이터를 이차함수로 표현하면 좋을까?","우리가 영상 조회수를 예측할 때 어떤 기준으로 영상을 골라야 할까?"])
-        yt_url = st.text_input("유튜브 링크를 입력하세요")
-        if st.button("조건 검증 및 조회수 기록"):
+        yt_url = st.text_input("유튜브 링크를 입력하세요", key="yt_url")
+        if st.button("조건 검증 및 조회수 기록", key="record_btn"):
             vid = extract_video_id(yt_url)
             if not vid:
-                st.error("⛔ 유효한 유튜브 링크가 아닙니다."); return
+                st.error("⛔ 유효한 유튜브 링크가 아닙니다.")
+                st.stop()
             info = fetch_video_details(vid)
             if not info:
-                st.error("영상 정보를 가져올 수 없습니다."); return
+                st.error("영상 정보를 가져올 수 없습니다.")
+                st.stop()
             valid = (info['views']<VIDEO_CRITERIA['max_views'] and
                       VIDEO_CRITERIA['min_subs']<=info['subs']<=VIDEO_CRITERIA['max_subs'])
             st.write(info)
             if not valid:
-                st.warning("조건을 만족하지 않습니다. 다른 영상을 선택하세요."); return
+                st.warning("조건을 만족하지 않습니다. 다른 영상을 선택하세요.")
+                st.stop()
             # ['학번','video_id','timestamp','viewCount','likeCount','commentCount']
             stats = {k:info[k] for k in ('views',)}  # views만 사용
             ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -305,7 +308,7 @@ def main_ui():
             st.success("✅ 기록 완료")
 
         raw = st.text_area("영상 선택 기준을 입력하세요", key="selection_raw", height=200)
-        if st.button("요약 & 저장", key="selection_save"):
+        if st.button("요약 & 저장", key="summary_btn"):
             if not raw.strip():
                 st.error("선정 기준을 입력해야 합니다.")
                 st.stop()
