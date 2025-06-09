@@ -779,11 +779,11 @@ def main_ui():
 
 def teacher_ui():
     st.title("🧑‍🏫 교사용 대시보드")
-    df = pd.DataFrame(load_sheet_records(yt_name), columns=["학번","video_id","timestamp","viewcount"])
+    df = pd.DataFrame(load_sheet_records(yt_name), columns=["학번","video_id","timestamp","viewCount"])
     if df.empty:
         st.info("데이터가 없습니다."); return
     st.metric("제출 건수", len(df))
-    st.metric("평균 조회수", int(df["viewcount"].mean()))
+    st.metric("평균 조회수", int(df["viewCount"].mean()))
     st.dataframe(df.tail(20))
 
 # === 메인 탭 구조 ===
