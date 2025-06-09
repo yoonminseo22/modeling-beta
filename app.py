@@ -307,7 +307,7 @@ def main_ui():
             safe_append(yt_ws, [sid, vid, ts, stats['views']])
             st.success("✅ 기록 완료")
 
-        raw = st.text_area("영상 선택 기준을 입력하세요", key="selection_raw", height=200)
+        raw = st.text_area("영상 선택 기준을 입력하세요", placeholder="예) 구독자 수 5천명 이상, 최근 6개월 이내 업로드, 조회수 증가 곡선이 완만한 영상",  key="selection_raw", height=200)
         if st.button("요약 & 저장", key="summary_btn"):
             if not raw.strip():
                 st.error("선정 기준을 입력해야 합니다.")
