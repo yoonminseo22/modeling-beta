@@ -304,6 +304,27 @@ def main_ui():
             safe_append(yt_ws, [sid, vid, ts, stats['views']])
             st.success("✅ 기록 완료")
 
+        raw = st.text_area("영상 선택 기준을 입력하세요", key="selection_raw", height=200)
+        if st.button("요약 & 저장", key="selection_save"):
+            if not raw.strip():
+                st.error("선정 기준을 입력해야 합니다.")
+                st.stop()
+
+            # GPT로 요약
+            with st.spinner("GPT에게 기준을 요약받는 중..."):
+                summary = summarize_selection(raw)
+            st.success("요약 완료!")
+            st.write("**요약본**")
+            st.write(summary)
+
+            # 스프레드시트에 기록
+            ss = gc.open_by_key(yt_id)
+            ws = ss.worksheet("영상선택기준")  # 미리 시트 생성
+            timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            row = [sid, timestamp, raw, summary]
+            safe_append(ws, row)
+            st.info("스프레드시트에 저장되었습니다.")
+
     elif step==2:
         step_header("2️⃣-1️⃣ 유튜브 조회수 이차 회귀 분석하기",
                     ["조회수 데이터를 활용해 이차함수 회귀식을 생성하고 그 성질(계수, 꼭짓점, 볼록성 등)을 해석할 수 있다.", "생성된 회귀식을 활용하여 조회수가 100만에 도달하는 시점을 예측할 수 있다."],
