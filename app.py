@@ -315,7 +315,7 @@ def main_ui():
 
             # GPT로 요약
             with st.spinner("GPT에게 기준을 요약받는 중..."):
-                summary = summarize_selection(raw)
+                summary = summarize_discussion(raw)
             st.success("요약 완료!")
             st.write("**요약본**")
             st.write(summary)
