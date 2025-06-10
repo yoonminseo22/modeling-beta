@@ -380,7 +380,7 @@ def main_ui():
 
             # 선택된 세 점만 산점도로 표시
             elapsed_sel = (sel['timestamp'] - base).dt.total_seconds() / 3600
-            fig, ax = plt.subplots(figsize=(6, 4))
+            fig, ax = plt.subplots(figsize=(6, 6))
             ax.scatter(
                 elapsed_sel,
                 y_scaled,
@@ -388,6 +388,7 @@ def main_ui():
                 color='steelblue',
                 label="선택된 세 점 (만 단위)"
             )
+            ax.set_aspect('equal', adjustable='box')
             ax.set_xlabel('경과 시간 (시간 단위)')
             ax.set_ylabel('조회수 (단위: 만 회)')
             ax.legend()
