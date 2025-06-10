@@ -450,53 +450,35 @@ def main_ui():
             if st.button("적합도 평가", key="eval_button"):
                 st.session_state["eval_clicked"] = True
 
-            # 2-c) ‘eval_clicked’가 True인 경우 계산 및 출력
+            # 2-c) ‘eval_clicked’가 True인 경우 MSE만 계산 및 출력
             if st.session_state.get("eval_clicked", False):
-                # 2-c-1) 전체 예측값(만 단위) → 전체 예측값(원 단위) 벡터 생성
-                time_poly     = np.poly1d([a, b, c])
-                y_pred_scaled = time_poly(x_hours_all)      # 만 단위 예측값 (길이 N)
-                y_pred        = y_pred_scaled * 10000       # 원 단위 예측값 (길이 N)
+                # 전체 예측값(만 단위) → 실제 조회수(원 단위) 계산
+                time_poly = np.poly1d([a, b, c])
+                y_pred_scaled = time_poly(x_hours_all)
+                y_pred = y_pred_scaled * 10000
 
-                # 2-c-2) 오차(errors) 계산 (길이 N 벡터)
+                # 오차 제곱의 평균 → MSE
                 errors = y_original - y_pred
+                MSE = np.mean(errors**2)
 
-                # 2-c-3) MAE 계산
-                abs_errors = np.abs(errors)
-                MAE = np.mean(abs_errors)
-                st.write(f"· 평균절대오차(MAE): {MAE:,.2f}")
+                # 1) MSE 출력
+                st.markdown(f"### 🔍 평균제곱오차 (MSE): {MSE:,.2f}")
 
-                # 2-c-4) MSE, RMSE 계산
-                sq_errors = errors**2
-                MSE = np.mean(sq_errors)
-                RMSE = np.sqrt(MSE)
-                st.write(f"· 평균제곱오차(MSE): {MSE:,.2f}")
-                st.write(f"· 제곱근평균제곱오차(RMSE): {RMSE:,.2f}")
+                # 2) MSE 의미 설명
+                st.markdown("""
+**MSE(Mean Squared Error, 평균제곱오차)**  
+예측값과 실제값의 차이를 제곱한 뒤 그 평균을 구한 값으로,  
+값이 작을수록 예측 오차가 적다는 것을 의미합니다.
 
-                # 2-c-5) MAE / 평균 조회수 비율
-                mean_views = y_original.mean()
-                MAE_ratio = MAE / mean_views * 100
-                st.write(f"· MAE / 평균 조회수 비율: {MAE_ratio:.2f}%")
+- **단위**: (실제 조회수 단위\(^2\))이므로 수치가 크게 보일 수 있습니다.  
+- **값의 의미**:  
+  - 0에 가까울수록 예측 정확도가 높음  
+  - 클수록 오차가 크다는 뜻
 
-                # 2-c-6) MAE / 데이터 범위 비율
-                data_range = y_original.max() - y_original.min()
-                MAE_range_ratio = MAE / data_range * 100
-                st.write(f"· MAE / 데이터 범위 비율: {MAE_range_ratio:.2f}%")
-
-                # 2-c-7) MAPE 계산 (원단위)
-                mask = y_original > 0
-                pct_errors = np.abs((y_original[mask] - y_pred[mask]) / y_original[mask]) * 100
-                MAPE = np.mean(pct_errors)
-                st.write(f"· 평균절대백분율오차(MAPE): {MAPE:.2f}%")
-
-                # 2-c-8) 잔차(residual) 그래프 그리기
-                fig_res, ax_res = plt.subplots(figsize=(6, 3))
-                ax_res.scatter(df_global['timestamp'], errors, s=15, color='purple', label="잔차 (원 단위)")
-                ax_res.axhline(0, linestyle='--', color='gray')
-                ax_res.set_xlabel('시간')
-                ax_res.set_ylabel('잔차 (실제 조회수 − 예측 조회수)')
-                ax_res.legend()
-                plt.xticks(rotation=45)
-                st.pyplot(fig_res)
+**모델 적합 판단 기준**  
+- 일반적으로 **MSE < 데이터 분산(Var(Y))** 이면 모델이 충분히 적합하다고 봅니다.  
+- 또는 **데이터 범위(range)의 10% 수준** 이내에 MSE가 들어오면 안정적인 예측 모델로 간주할 수 있습니다.
+""")
 
             if st.button("실제 데이터 더 확인하기", key="detail_button"):
                 st.session_state["detail_clicked"] = True
