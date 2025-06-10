@@ -375,8 +375,7 @@ def main_ui():
                 'x_hours': x_hours,     # 회귀에 사용된 x(시간 단위)
                 'y': y,                 # 원본 조회수(원 단위)
                 'y_scaled': y_scaled,    # 선택된 세 점의 조회수(만 단위)
-                'x_hours_all': x_hours_all,
-                'df_global': df
+                'x_hours_all': x_hours_all
             })
 
             # 6) 세 점(만 단위) 산점도 및 회귀곡선 시각화 (x축: 시간(시 단위))
@@ -390,7 +389,7 @@ def main_ui():
             # 실제 전체 데이터 (만 단위) 산점도 (작은 회색 점, x=시간(시))
             ax.scatter(
                 x_hours_all,
-                df_global['viewcount'] / 10000,
+                df['viewcount'] / 10000,
                 s=40,
                 color='lightgray',
                 label="실제 데이터 (만 단위)"
