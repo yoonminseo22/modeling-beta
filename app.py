@@ -379,11 +379,10 @@ def main_ui():
             })
 
             # 선택된 세 점만 산점도로 표시
-            elapsed_sel = (sel['timestamp'] - base).dt.total_seconds() / 3600
-            elapsed_days = elapsed_sel / 24  # 일 단위
+            elapsed_sel = (sel['timestamp'] - base).dt.total_seconds() / 60
             fig, ax = plt.subplots(figsize=(6, 6))
             ax.scatter(
-                elapsed_days,
+                elapsed_sel,
                 y_scaled,
                 s=100,
                 color='steelblue',
