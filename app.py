@@ -374,7 +374,7 @@ def main_ui():
                 'base': base,
                 'x_hours': x_hours,     # 회귀에 사용된 x(시간 단위)
                 'y': y,                 # 원본 조회수(원 단위)
-                'y_scaled': y_scaled    # 선택된 세 점의 조회수(만 단위)
+                'y_scaled': y_scaled,    # 선택된 세 점의 조회수(만 단위)
                 'x_hours_all': x_hours_all
             })
 
