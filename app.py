@@ -390,7 +390,6 @@ def main_ui():
                 label="선택된 세 점 (만 단위)"
             )
             ax.grid(True, linestyle='--', alpha=0.7)
-            ax.set_aspect('equal', adjustable='box')
             ax.set_xlabel('경과 시간 (일일 단위)')
             ax.set_ylabel('조회수 (단위: 만 회)')
             ax.legend()
