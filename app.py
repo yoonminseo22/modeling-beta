@@ -461,10 +461,18 @@ def main_ui():
                 errors = y_original - y_pred
                 MSE = np.mean(errors**2)
 
-                # 1) MSE 출력
-                st.markdown(f"### 🔍 평균제곱오차 (MSE): {MSE:,.2f}")
+                # 3) 데이터 분산(Var) 및 범위(range) 계산
+                var_Y = np.var(y_original)                              # 분산
+                data_range = y_original.max() - y_original.min()         # 범위
+                range10 = data_range * 0.1                               # 범위의 10%
 
-                # 2) MSE 의미 설명
+                # 4) 결과 출력
+                st.markdown(f"### 🔍 평균제곱오차 (MSE): {MSE:,.2f}")
+                st.markdown(f"- 데이터 분산 (Var): {var_Y:,.2f}")
+                st.markdown(f"- 데이터 범위 (max−min): {data_range:,.2f}")
+                st.markdown(f"- 범위의 10% 수준: {range10:,.2f}")
+
+                # 5) MSE 의미 설명
                 st.markdown("""
 **MSE(Mean Squared Error, 평균제곱오차)**  
 예측값과 실제값의 차이를 제곱한 뒤 그 평균을 구한 값으로,  
@@ -478,8 +486,8 @@ def main_ui():
 **모델 적합 판단 기준**  
 - 일반적으로 **MSE < 데이터 분산(Var(Y))** 이면 모델이 충분히 적합하다고 봅니다.  
 - 또는 **데이터 범위(range)의 10% 수준** 이내에 MSE가 들어오면 안정적인 예측 모델로 간주할 수 있습니다.
-""")
-
+ 위 계산 결과를 참조해 보세요!  
+ """)
             if st.button("실제 데이터 더 확인하기", key="detail_button"):
                 st.session_state["detail_clicked"] = True
 
