@@ -589,94 +589,77 @@ def main_ui():
                 st.success("의견과 요약이 시트에 저장되었습니다!")
 
     elif step == 3 and all(k in st.session_state for k in ('a','b','c')):
-        # 제목 및 질문
+        # 1) 제목 및 질문
         step_header(
-            "2️⃣-2️⃣ γ(광고효과) 시뮬레이션",
-            ["실제 데이터와 예측값을 비교하여 적합성을 평가(MAE, RMSE)한다.","실제 데이터와 예측값을 비교하며 광고 전략의 영향을 이해한다."],
-            ["적합성 평가(MAE, RMSE)를 왜 해야 할까? 이 수치들이 무엇을 의미할까?","광고는 조회수에 어떤 영향을 미칠 수 있을까? 그 영향이 그래프에서 어떻게 나타날까?"]
+            "2️⃣-2️⃣ γ(광고효과) 시뮬레이션(Power Model)",
+            ["실제 데이터와 예측값을 비교하여 적합성을 평가(MSE)한다.",
+            "실제 데이터와 예측값을 비교하며 광고 전략의 영향을 이해한다."],
+            ["적합성 평가(MSE)를 왜 해야 할까? 이 수치들이 무엇을 의미할까?",
+            "광고는 조회수에 어떤 영향을 미칠 수 있을까? 그 영향이 그래프에서 어떻게 나타날까?"]
         )
 
-        # 1) 회귀 계수 불러오기 (a, b, c 모두 “시간(시)” / “만 단위” 기준)
+        # 2) 시간 모델 계수 불러오기
         a, b, c = st.session_state['a'], st.session_state['b'], st.session_state['c']
         time_poly = np.poly1d([a, b, c])
 
-        # 2) 광고비 및 γ 입력 (1만 원 단위)
+        # 3) 광고비·γ·지수 p 입력
         budget = st.number_input(
             "투입할 광고비를 입력하세요 (원)",
             min_value=0, step=10000, value=1000000, format="%d"
         )
         gamma = st.slider(
-            "광고효과 계수 γ 설정 (1만 원당 추가 조회수)",
+            "광고효과 계수 γ 설정 (1만 원당 기본 증가 조회수)",
             min_value=0.0, max_value=20.0, value=2.0, step=0.1
         )
-        # γ=2라면 “광고비 1만 원당 조회수 +2회”(만 단위 아님, 실제 회수)
+        p = st.slider(
+            "광고비 효과 지수 p 설정 (1보다 크게 하면 드라마틱 효과)",
+            min_value=1.0, max_value=3.0, value=1.5, step=0.1
+        )
 
-        # 3) 현재까지 마지막으로 기록된 “경과시간(시간 단위)”과 대응 timestamp 계산
-        #    st.session_state["x_hours"]는 (timestamp – base).dt.total_seconds()/3600 형태
-        x_hours_all = st.session_state["x_hours"]
-        x_now = x_hours_all.iloc[-1]                           # 마지막 시점(시간 단위)
-        base = st.session_state["base"]                        # 기준 시점(datetime)
-        # 시각화나 출력용 timestamp: x_now(시간) → 초로 변환
-        t_now = base + pd.to_timedelta(x_now * 3600, unit='s')  
+        # 4) 현재 시점(시간 단위) 계산
+        x_hours = st.session_state["x_hours"]            # (timestamp - base).dt.total_seconds()/3600
+        x_now = x_hours.iloc[-1]                         # 마지막 기록 시점 (시간 단위)
+        base = st.session_state["base"]                  # 기준 datetime
+        t_now = base + pd.to_timedelta(x_now * 3600, 's')
 
-        # 4) 시간 모델에 의한 예측값(만 단위) → 실제 조회수(원 단위)로 환산
-        y_time_scaled = time_poly(x_now)                        # “만 단위 예측값”
-        y_time_now = int(round(y_time_scaled * 10000))          # “원 단위 예측값”
+        # 5) 시간 모델 예측값 (만 단위 → 원 단위)
+        y_time_scaled = time_poly(x_now)                 # 만 단위 예측
+        y_time_now    = int(round(y_time_scaled * 10000))# 원 단위 예측
 
-        # 5) 광고효과 계산: 
-        unit_won = 10000                                        # 1만 원을 1단위로 봄
-        units = budget // unit_won                              # 지출한 만 원 단위 수
-        y_ad = int(round(gamma * units))                        # 실제 ‘추가 조회수(원 단위)’
-        #    ex) γ=2, budget=100만 → units=100 → y_ad=2×100=200회
+        # 6) Power 모델 광고효과 계산
+        unit_won = 10000
+        units = budget // unit_won                       # 만 원 단위로 환산
+        y_ad = int(round(gamma * (units ** p)))          # γ × units^p (원 단위 추가 조회수)
 
-        # 6) 광고효과 반영 후 현재 통합 예측 조회수
-        y_total_now = y_time_now + y_ad                         # (원 단위)
+        # 7) 통합 예측 조회수
+        y_total_now = y_time_now + y_ad
 
-        # 7) 결과 출력
-        st.write(f"▶️ 시간 모델 예측 조회수 (광고 없음, 원 단위): **{y_time_now:,}회**")
-        st.write(f"▶️ 광고비 효과 조회수 (현재 시점, 원 단위): **+{y_ad:,}회** (γ×{units})")
-        st.write(f"▶️ **통합 예측 조회수 (현재 시점, 원 단위):** **{y_total_now:,}회**")
+        # 8) 결과 출력
+        st.write(f"▶️ 시간 모델 예측 조회수 (광고 없음): **{y_time_now:,}회**")
+        st.write(f"▶️ 광고비 효과 조회수 (Power 모델): **+{y_ad:,}회**  (γ×{units}^p)")
+        st.write(f"▶️ **통합 예측 조회수:** **{y_total_now:,}회**")
 
-        # 8) 시각화
+        # 9) 시각화
         fig2, ax2 = plt.subplots(figsize=(8, 4))
-
-        # 8-1) 실제 데이터 산점도 (원본 조회수: 원 단위)
         df_global = st.session_state["df"]
         y_original = st.session_state["y"]
+
+        # 실제 데이터
         ax2.scatter(df_global['timestamp'], y_original, alpha=0.5, label="실제 조회수")
 
-        # 8-2) 회귀곡선: ts_curve_hours(0~x_now), 만 단위 예측 → 실제 조회수(원)로 환산
-        ts_curve_hours = np.linspace(0, x_now, 200)              # 시간(시) 범위
-        y_curve_scaled = time_poly(ts_curve_hours)              # 만 단위 예측값
-        y_curve = y_curve_scaled * 10000                        # 원 단위 예측값
-        x_curve_timestamp = base + pd.to_timedelta(ts_curve_hours * 3600, unit='s')
-        ax2.plot(
-            x_curve_timestamp,
-            y_curve,
-            color="orange", lw=2, linestyle="--",
-            label="시간 모델 (광고 없음)"
-        )
+        # 시간 모델 곡선 (광고 없음)
+        ts_curve = np.linspace(0, x_now, 200)
+        y_curve = time_poly(ts_curve) * 10000
+        times = base + pd.to_timedelta(ts_curve * 3600, 's')
+        ax2.plot(times, y_curve, linestyle="--", color="orange", lw=2, label="시간 모델 (광고 없음)")
 
-        # 8-3) 광고효과를 동일하게 더한 곡선 (원 단위)
-        y_curve_with_ad = y_curve + y_ad                          # “각 시점마다 +광고효과”
-        ax2.plot(
-            x_curve_timestamp,
-            y_curve_with_ad,
-            color="red", lw=2,
-            label="시간 모델 + 광고 효과"
-        )
+        # 광고효과를 더한 Power 모델 곡선
+        y_curve_with_ad = y_curve + y_ad
+        ax2.plot(times, y_curve_with_ad, color="red", lw=2, label="시간 모델 + 광고 효과")
 
-        # 8-4) 현재 시점 예측점 표시
-        ax2.scatter(
-            t_now, y_time_now,
-            color="green", s=80,
-            label="시간 모델 예측 (광고 없음)"
-        )
-        ax2.scatter(
-            t_now, y_total_now,
-            color="red", s=100,
-            label="광고 적용 예측점 (원 단위)"
-        )
+        # 현재 시점 예측점
+        ax2.scatter(t_now, y_time_now, color="green", s=80, label="광고 전 예측")
+        ax2.scatter(t_now, y_total_now, color="red",   s=100, label="광고 후 예측")
 
         ax2.set_xlabel("시간")
         ax2.set_ylabel("조회수 (원 단위)")
@@ -684,49 +667,48 @@ def main_ui():
         plt.xticks(rotation=45)
         st.pyplot(fig2)
 
-        # 9) 그래프 다운로드 버튼
+        # 10) 그래프 다운로드
         buf2 = io.BytesIO()
         fig2.savefig(buf2, format='png', dpi=150, bbox_inches='tight')
         buf2.seek(0)
         st.download_button(
-            label="📷 광고비 적용 그래프 다운로드",
+            label="📷 광고 효과 Power 모델 그래프 다운로드",
             data=buf2,
-            file_name="budget_plot_with_ad_updated.png",
+            file_name="power_ad_effect_updated.png",
             mime="image/png"
         )
-
-        # 10) γ(감마) 계수 해설서
-        with st.expander("📖 γ(감마) 계수(광고효과)란?"):
+        
+        with st.expander("📖 γ(감마)·p(지수) 계수 해설 (학생용)"):
             st.markdown("""
-            - **γ(감마) 계수**:  
-            - 광고비 **1만 원**을 투입했을 때 실제로 늘어나는 조회수를 의미합니다.  
-            - 예를 들어, γ=2라면 ‘광고비 1만 원당 조회수 +2회’가 된다는 뜻입니다.  
-            - 즉, γ × (광고비 ÷ 10,000) = 광고로 얻은 추가 조회수 (원 단위)
-            
-            - **왜 모든 시점에 광고효과를 더했을까?**  
-            - 실제로 광고를 한 번 집행하면 그 시점 이후에도 노출이 이어지므로,  
-                ‘광고 투입 시점 이후의 모든 예측 시간대’에 조회수가 높아집니다.  
-            - 따라서 **광고 투입 시점 이후 전체 곡선**에 동일하게 조회수(원 단위)를 더해 주면,  
-                학생들이 ‘광고가 곧바로 곡선을 위로 밀어 올린다’는 개념을 시각적으로 이해하기 쉽습니다.
-            
-            - **코드 해석 예시**:  
-            1. γ=3, 광고비=50만 원 → units=50 → y_ad=3×50=150회 (원 단위)  
-            2. 시간 모델에서 현재 시점 예측이 20,000회라면  
-                – 광고 없음 예측 : 20,000회  
-                – 광고 있음 예측 : 20,000 + 150 = 20,150회  
-            3. 예를 들어 1시간 뒤 예측(광고 없음)이 21,000회라면  
-                – 광고 있음 예측 : 21,000 + 150 = 21,150회
-            
-            - **만약 광고비를 두 배로 늘린다면?**  
-            1. γ=2, 광고비=100만 원 → units=100 → y_ad=2×100=200회  
-                → 추가 조회수도 두 배 증가  
-            2. 시간 모델 곡선이 이전 대비 더 높게 올라가므로,  
-                곡선 간격을 비교하며 광고비 효율을 분석할 수 있습니다.
-            
-            - **광고비 효율적 조건**:  
-            - ‘광고 한 단위(1만 원)당 조회수 증가량(γ)’이 높을수록 효율이 좋습니다.  
-            - 현실적으로 γ가 너무 높으면 비현실적이므로, 일정 이상 광고비를 늘려도  
-                증가폭이 작아지는 **감쇠형 모델(예: 로그 함수)**을 추가로 고려할 수 있습니다.
+            **1. γ(감마) 계수란?**  
+            - 광고비 **1만 원**을 썼을 때, **얼마나 조회수가 더 늘어나는지** 알려주는 숫자예요.  
+            - 예를 들어 γ = 2 라고 하면,  
+            - 광고비 1만 원당 조회수가 **+2회** 늘어난다는 뜻이랍니다.  
+            - 그래서 광고비가 50만 원(=50단위)이라면,  
+                `조회수 증가 = 2 × 50 = 100회` 가 추가돼요.
+
+            **2. p(지수) 계수란?**  
+            - p는 단순히 곱하기가 아니라, **거듭 제곱**처럼 효과가 커지는 정도를 정해줘요.  
+            - 공식은 `조회수 증가 = γ × (units ** p)` 이고,  
+            - units = 광고비 ÷ 10,000 (만 원 단위)  
+            - p가 **1보다 크면**,  
+            - 광고비를 두 배로 올렸을 때,  
+            - 조회수 증가폭이 **(2^p)배**로 늘어나서 훨씬 드라마틱해져요!  
+            - 예시)  
+            - γ=2, 광고비=100만 원 → units=100  
+            - p=1.0 → 조회수 증가 = 2 × (100¹) = 200회  
+            - p=2.0 → 조회수 증가 = 2 × (100²) = 2 × 10,000 = 20,000회  
+            - p=1.5 → 조회수 증가 = 2 × (100¹·⁵) ≈ 2 × 1,000 = 2,000회
+
+            **3. 왜 이렇게 계산할까?**  
+            - 실제 광고를 많이 할수록 조회수가 선형보다 더 크게 늘어난다고 가정해 보면,  
+            - p를 이용해 ‘광고 효과가 점점 더 커지는 모습’을 보여줄 수 있어요.
+
+            **4. 정리와 팁**  
+            1. **γ**는 “단위 광고비로 얻는 기본 조회수”  
+            2. **p**가 크면 클수록 “광고비를 늘렸을 때 조회수가 더 폭발적으로 증가”  
+            3. 너무 큰 p를 쓰면 현실감이 떨어지니, **1.0~2.0 사이**에서 실험해 보세요.  
+            4. 다양한 값을 바꿔 보면서 그래프가 어떻게 달라지는지 눈으로 확인해 보세요!
             """)
 
 
@@ -751,26 +733,61 @@ def main_ui():
         st.write(f"선택 결과 → {cls} {team}")
         session = f"{cls}-{team}"
 
-        # 토의 내용 입력
-        raw = st.text_area("토의 내용을 입력하세요", key="discussion_raw", height=200)
+        st.divider()  # 시각적 구분선
 
-        if st.button("요약 & 저장"):
-            if not raw.strip():
-                st.error("토의 내용을 입력해야 합니다.")
-                return
-            with st.spinner("GPT에게 요약을 부탁하는 중..."):
-                summary = summarize_discussion(raw)
-            st.success("요약 완료!")
-            st.write("**요약본**")
-            st.write(summary)
+            # ── 역할 선택 & 안내 ───────────────────────────
+        roles = {
+            "발표자":        "전체 흐름을 소개하고 각 파트를 자연스럽게 연결합니다.",
+            "데이터 분석":   "회귀식(a, b, c)과 MSE 결과를 설명합니다.",
+            "그래프 설명":   "그래프의 축·꼭짓점·볼록성 등 시각 자료를 해설합니다.",
+            "마케팅 전략":   "광고비 조정, 업로드 타이밍 등 제안 전략을 소개합니다.",
+            "디자인":        "슬라이드 레이아웃·이미지·색상 톤을 결정합니다.",
+            "종합 정리":     "질의응답 대비 FAQ, 느낀 점, 향후 과제 등을 정리합니다."
+        }
+        my_role = st.selectbox("역할을 선택하세요", list(roles.keys()), key="role_select")
+        st.info(f"**내 역할 가이드:**  {roles[my_role]}")
 
-            # 스프레드시트 기록
-            ss = gc.open_by_key(yt_id)
-            ds = ss.worksheet("토의요약")  # 미리 만들어두세요
-            timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-            row = [session, timestamp, raw, summary]
-            safe_append(ds, row)
-            st.info("스프레드시트에 저장되었습니다.")
+        # ── 대본 작성 영역 ─────────────────────────────
+        script_key = f"script_{session}_{my_role}"
+        script = st.text_area("대본을 작성해 보세요 ✍️", key=script_key, height=250,
+                            placeholder="여기에 발표 대본을 적어 보세요…")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("💡 스크립트 예시 생성(GPT)", key="make_script"):
+                if not script.strip():  # 내용이 없을 때에만 예시 제공
+                    with st.spinner("GPT가 예시를 작성하는 중…"):
+                        prompt = f"역할: {my_role}\n발표 주제: 유튜브 이차회귀 분석 결과\n학생 발표용 대본 예시를 150자 내외로 한국어 존댓말로 작성해 줘."
+                        example = generate_script_example(prompt)  # ⬅︎ OpenAI 호출 함수(별도 구현)
+                    st.session_state[script_key] = example
+                    st.success("예시 대본이 입력됐습니다! 필요에 맞게 수정해 보세요.")
+                else:
+                    st.warning("이미 작성한 내용이 있어 예시를 덮어쓰지 않았어요.")
+
+        with col2:
+            if st.button("📑 저장 & 요약", key="save_summary"):
+                if not script.strip():
+                    st.error("대본이나 토의 내용을 입력해야 저장할 수 있습니다.")
+                    st.stop()
+
+                # ① GPT 요약
+                with st.spinner("GPT에게 요약을 부탁하는 중…"):
+                    summary = summarize_discussion(script)
+
+                # ② 시트 저장
+                timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                row = [session, my_role, timestamp, script, summary]
+                try:
+                    ss = gc.open_by_key(yt_id)
+                    ws = ss.worksheet("토의요약")   # 미리 생성
+                    safe_append(ws, row)
+                    st.success("스프레드시트에 저장되었습니다!")
+                except Exception as e:
+                    st.error(f"스프레드시트 저장 중 오류: {e}")
+
+                # ③ 요약 출력
+                st.markdown("### ✂️ GPT 요약본")
+                st.write(summary)
 
 def teacher_ui():
     st.title("🧑‍🏫 교사용 대시보드")
