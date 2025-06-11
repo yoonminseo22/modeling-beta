@@ -237,6 +237,26 @@ def summarize_discussion(text):
     )
     return resp.choices[0].message.content.strip()
 
+def generate_script_example(prompt: str) -> str:
+    """
+    역할/주제 프롬프트를 받아 1-2문단 분량 예시 발표 대본을 반환합니다.
+    """
+    try:
+        res = openai.chat.completions.create(
+            model   = "gpt-3.5-turbo",
+            messages= [
+                {"role": "system", "content":
+                 "당신은 중3 학생 발표 대본을 도와주는 친절한 선생님입니다."},
+                {"role": "user",   "content": prompt}
+            ],
+            temperature = 0.7,
+            max_tokens  = 300          # 필요시 조정
+        )
+        return res.choices[0].message.content.strip()
+    except Exception as e:
+        st.error(f"GPT 호출 실패: {e}")
+        return "⚠️ GPT 호출 실패 – 나중에 다시 시도해 주세요."
+
 # --- 8) 메인 화면(로그인 후) ---
 def main_ui():
     load_sheet_records.clear()
