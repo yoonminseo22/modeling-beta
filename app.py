@@ -256,6 +256,12 @@ def generate_script_example(prompt: str) -> str:
     except Exception as e:
         st.error(f"GPT 호출 실패: {e}")
         return "⚠️ GPT 호출 실패 – 나중에 다시 시도해 주세요."
+    
+def fill_example(prompt: str, key: str):
+    """GPT 예시 대본을 받아 session_state[key]에 삽입"""
+    example = generate_script_example(prompt)
+    st.session_state[key] = example
+    st.toast("예시 대본이 입력되었습니다! 필요에 맞게 수정해 보세요.")
 
 # --- 8) 메인 화면(로그인 후) ---
 def main_ui():
@@ -774,15 +780,17 @@ def main_ui():
 
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("💡 스크립트 예시 생성(GPT)", key="make_script"):
-                if not script.strip():  # 내용이 없을 때에만 예시 제공
-                    with st.spinner("GPT가 예시를 작성하는 중…"):
-                        prompt = f"역할: {my_role}\n발표 주제: 유튜브 이차회귀 분석 결과\n학생 발표용 대본 예시를 150자 내외로 한국어 존댓말로 작성해 줘."
-                        example = generate_script_example(prompt)  # ⬅︎ OpenAI 호출 함수(별도 구현)
-                    st.session_state[script_key] = example
-                    st.success("예시 대본이 입력됐습니다! 필요에 맞게 수정해 보세요.")
-                else:
-                    st.warning("이미 작성한 내용이 있어 예시를 덮어쓰지 않았어요.")
+            # ② 버튼 – on_click으로 콜백 연결
+            prompt = (
+                f"역할: {my_role}\n"
+                "발표 주제: 유튜브 이차회귀 분석 결과\n"
+                "150자 내외 발표 대본 작성"
+            )
+            st.button(
+                "💡 스크립트 예시 생성(GPT)",
+                on_click=fill_example,
+                args=(prompt, script_key)
+            )
 
         with col2:
             if st.button("📑 저장 & 요약", key="save_summary"):
