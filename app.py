@@ -1,4 +1,4 @@
-# app.py
+# app.py 라이브러리 로드
 import openai
 import streamlit as st
 import gspread
@@ -22,14 +22,13 @@ prop = fm.FontProperties(fname=font_path)
 font_name = prop.get_name()
 rcParams["font.family"] = font_name
 plt.rc('axes', unicode_minus=False)
-
+# 타이틀 설정
 st.set_page_config("📈 유튜브 조회수 분석기", layout="centered")
-
 st.title("📈 유튜브 조회수 분석기")
 st.subheader("학생용 로그인/회원가입")
 
 
-# --- 1) 세션 상태 초기화 ---
+# 세션 상태 초기화 
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 if "user" not in st.session_state:
@@ -53,7 +52,7 @@ yt_name  = yt_conf["sheet_name"]
 usr_id    = usr_conf["spreadsheet_id"]
 usr_name = usr_conf["sheet_name"]
 
-# ── Sheets 도우미 (429 백오프) ───────────────────────────────────────────────
+# Sheets 도우미 (429 백오프 안정성) 및 캐시 초기화
 
 def safe_append(ws, row: List[Any]):
     """429 대응 append_row."""
@@ -121,7 +120,7 @@ def extract_video_id(url:str):
     m = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", url)
     return m.group(1) if m else None
 
-# ── 공통 UI 컴포넌트 ────────────────────────────────────────────────────────
+# 공통 UI 컴포넌트
 
 def step_header(title: str, goals: List[str], questions: List[str]):
     st.markdown(f"### {title}")
@@ -131,7 +130,7 @@ def step_header(title: str, goals: List[str], questions: List[str]):
     with st.expander("💡 핵심 발문"):
         st.markdown("\n".join([f"- {q}" for q in questions]))
 
-# 해시 함수
+# 해시 함수 (비밀번호 해시 처리)
 def hash_password(pw: str) -> str:
     if not isinstance(pw, str) or pw == "":
         return ""
@@ -164,7 +163,6 @@ def signup_ui():
 
 # 로그인 UI
 def login_ui():
-    st.cache_data.clear()
     st.header("🔐 로그인")
     usr_rows = load_sheet_records(usr_id, usr_name)
     sid = st.text_input("학번", key="login_sid")
@@ -224,7 +222,7 @@ def get_video_statistics(video_id):
             "commentCount": int(stats.get("commentCount", 0)),
         }
     return None
-
+# GPT 요약가
 def summarize_discussion(text):
     resp = openai.chat.completions.create(
         model="gpt-3.5-turbo",
@@ -236,7 +234,7 @@ def summarize_discussion(text):
         max_tokens=300
     )
     return resp.choices[0].message.content.strip()
-
+# GPT 대본 생성
 def generate_script_example(prompt: str) -> str:
     """
     역할/주제 프롬프트를 받아 1-2문단 분량 예시 발표 대본을 반환합니다.
@@ -263,7 +261,7 @@ def fill_example(prompt: str, key: str):
     st.session_state[key] = example
     st.toast("예시 대본이 입력되었습니다! 필요에 맞게 수정해 보세요.")
 
-# --- 8) 메인 화면(로그인 후) ---
+# 학생 메인 화면(로그인 후) 
 def main_ui():
     load_sheet_records.clear()
     user = st.session_state["user"]
@@ -307,7 +305,7 @@ def main_ui():
     else:
         df = None
 
-
+    #1차시
     if step==1:
         step_header("1️⃣ 유튜브 조회수 기록하기", ["실제 유튜브 영상 조회수 데이터를 선정하고 이차함수 회귀분석의 필요성을 이해한다.", "조회수 데이터를 수집하기 위한 기준을 설정하고 협력적으로 영상을 선정한다."],
                     ["그냥 점을 이어서 예측하면 정확할까? 왜 정확하지 않을까?", "정확한 예측을 하려면 무엇이 필요할까?", "회귀 분석이란 무엇일까? 왜 중요한 걸까?","그래프 형태가 왜 직선이 아닌 곡선으로 나타날까?","왜 현실의 데이터를 이차함수로 표현하면 좋을까?","우리가 영상 조회수를 예측할 때 어떤 기준으로 영상을 골라야 할까?"])
@@ -339,21 +337,21 @@ def main_ui():
                 st.error("선정 기준을 입력해야 합니다.")
                 st.stop()
 
-            # GPT로 요약
+            # GPT 요약
             with st.spinner("GPT에게 기준을 요약받는 중..."):
                 summary = summarize_discussion(raw)
             st.success("요약 완료!")
             st.write("**요약본**")
             st.write(summary)
 
-            # 스프레드시트에 기록
+            # 스프레드시트 기록
             ss = gc.open_by_key(yt_id)
-            ws = ss.worksheet("영상선택기준")  # 미리 시트 생성
+            ws = ss.worksheet("영상선택기준")  # 미리 해당 시트 생성
             timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
             row = [sid, timestamp, raw, summary]
             safe_append(ws, row)
             st.info("스프레드시트에 저장되었습니다.")
-
+    #2차시
     elif step==2:
         step_header("2️⃣-1️⃣ 유튜브 조회수 이차 회귀 분석하기",
                     ["조회수 데이터를 활용해 이차함수 회귀식을 생성하고 그 성질(계수, 꼭짓점, 볼록성 등)을 해석할 수 있다.", "생성된 회귀식을 활용하여 조회수가 100만에 도달하는 시점을 예측할 수 있다."],
@@ -420,7 +418,7 @@ def main_ui():
             ax.legend()
             st.pyplot(fig)
 
-            # 7) 그래프 저장 및 다운로드 버튼
+            # 그래프 저장 및 다운로드 버튼
             buf = io.BytesIO()
             fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
             buf.seek(0)
@@ -431,7 +429,7 @@ def main_ui():
                 mime="image/png"
             )
 
-            # 8) 회귀식 출력 (만 단위 기준, 소수점 네 자리로 포맷)
+            # 회귀식 출력 (만 단위 기준, 소수점 네 자리로)
             str_a = f"{a:.4f}"
             str_b = f"{b:.4f}"
             str_c = f"{c:.4f}"
@@ -450,12 +448,12 @@ def main_ui():
                 "(Hint: 위 회귀식에서 $y=100$인 $x$를 구하면 됩니다. 단위는 시간(시)입니다.)"
             )
 
-            # 9) 적합도 평가 및 상세 보기 버튼 상태 초기화
+            # 적합도 평가 및 상세 보기 버튼 상태 초기화
             st.session_state["eval_clicked"] = False
             st.session_state["detail_clicked"] = False
 
         if "a" in st.session_state and "df" in st.session_state and "base" in st.session_state:
-            # 2-a) 세션에서 필요한 값 불러오기 (없는 경우 기본값으로 계산)
+            # 세션에서 필요한 값 불러오기 (없는 경우 기본값으로 계산)
             a = st.session_state["a"]
             b = st.session_state["b"]
             c = st.session_state["c"]
@@ -472,11 +470,11 @@ def main_ui():
                 elapsed_all = (df_global['timestamp'] - base).dt.total_seconds()
                 x_hours_all = elapsed_all / 3600
 
-            # 2-b) ‘적합도 평가’ 버튼
+            # ‘적합도 평가’ 버튼
             if st.button("적합도 평가", key="eval_button"):
                 st.session_state["eval_clicked"] = True
 
-            # 2-c) ‘eval_clicked’가 True인 경우 MSE만 계산 및 출력
+            # ‘eval_clicked’가 True인 경우 MSE만 계산 및 출력
             if st.session_state.get("eval_clicked", False):
                 # 전체 예측값(만 단위) → 실제 조회수(원 단위) 계산
                 time_poly = np.poly1d([a, b, c])
@@ -560,7 +558,7 @@ def main_ui():
                     mime="image/png"
                 )
             
-                    # ── 0) 학생 의견 입력란 추가 ──
+                    # 학생 의견 입력란
         st.subheader("💬 회귀분석과 적합도 평가 의견 남기기")
                 # ── 반 선택 ─────────────────────────────────────────
         cls = st.selectbox(
@@ -605,8 +603,8 @@ def main_ui():
                 summary = resp.choices[0].message.content
                 st.markdown("**요약:**  " + summary)
 
-                # 2) 스프레드시트에 기록
-                eval_sheet_name = "적합도평가"  # 필요하면 secrets.toml 에서 불러오세요
+                # 스프레드시트에 기록
+                eval_sheet_name = "적합도평가"  # 해당 시트 미리 생성
                 ws = gc.open_by_key(yt_id).worksheet(eval_sheet_name)
                 timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
                 row = [session, timestamp, opinion_input, summary]
@@ -737,7 +735,7 @@ def main_ui():
             4. 다양한 값을 바꿔 보면서 그래프가 어떻게 달라지는지 눈으로 확인해 보세요!
             """)
 
-
+    #3차시
     elif step==4:
         step_header("3️⃣ 토의 내용 입력 & 요약하기",
                 ["데이터 분석 결과를 종합하여 발표 자료로 구성하고 분석 및 마케팅 전략에 대해 명확하게 전달할 수 있다.","조별 협력을 통해 체계적으로 발표 준비 과정을 경험하고 설득력 있는 발표를 구성할 수 있다."],
@@ -824,7 +822,7 @@ def main_ui():
                 # ③ 요약 출력
                 st.markdown("### ✂️ GPT 요약본")
                 st.write(summary)
-
+#교사용 대시보드 만들기
 def teacher_ui():
     st.title("🧑‍🏫 교사용 대시보드")
     df = pd.DataFrame(load_sheet_records(yt_name), columns=["학번","video_id","timestamp","viewCount"])
