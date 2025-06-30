@@ -462,7 +462,7 @@ def main_ui():
             df_global = st.session_state["df"]
 
             # y_original: 세션에 있으면 그대로, 없으면 df_global에서 추출
-            y_original = st.session_state.get("y_original", df_global['viewcount'].values)
+            y_original = df_global['viewcount'].to_numpy()
 
             # x_hours_all: 세션에 있으면 그대로, 없으면 계산
             if "x_hours_all" in st.session_state:
