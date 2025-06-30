@@ -453,66 +453,77 @@ def main_ui():
             st.session_state["eval_clicked"] = False
             st.session_state["detail_clicked"] = False
 
+        # ─── 2. 회귀 계수와 데이터 준비 (세션에 저장되어 있어야 함) ─────────────
         if "a" in st.session_state and "df" in st.session_state and "base" in st.session_state:
-            # 세션에서 필요한 값 불러오기 (없는 경우 기본값으로 계산)
-            a = st.session_state["a"]
-            b = st.session_state["b"]
-            c = st.session_state["c"]
-            base = st.session_state["base"]
+            a         = st.session_state["a"]
+            b         = st.session_state["b"]
+            c         = st.session_state["c"]
+            base      = st.session_state["base"]
             df_global = st.session_state["df"]
 
             # y_original: 세션에 있으면 그대로, 없으면 df_global에서 추출
             y_original = st.session_state.get("y_original", df_global['viewcount'].values)
 
-            # x_hours_all: 세션에 있으면 그대로, 없으면 df_global에서 계산
+            # x_hours_all: 세션에 있으면 그대로, 없으면 계산
             if "x_hours_all" in st.session_state:
                 x_hours_all = st.session_state["x_hours_all"]
             else:
                 elapsed_all = (df_global['timestamp'] - base).dt.total_seconds()
                 x_hours_all = elapsed_all / 3600
 
-            # ‘적합도 평가’ 버튼
+            # ─── 3. ‘적합도 평가’ 버튼 ───────────────────────────────────────
             if st.button("적합도 평가", key="eval_button"):
                 st.session_state["eval_clicked"] = True
 
-            # ‘eval_clicked’가 True인 경우 MSE만 계산 및 출력
+            # ─── 4. MAE/​MAPE 계산 및 출력 ────────────────────────────────────
             if st.session_state.get("eval_clicked", False):
-                # 전체 예측값(만 단위) → 실제 조회수(원 단위) 계산
-                time_poly = np.poly1d([a, b, c])
+                # 4-1) 예측값 계산 (만 단위 → 원 단위)
+                time_poly     = np.poly1d([a, b, c])
                 y_pred_scaled = time_poly(x_hours_all)
-                y_pred = y_pred_scaled * 10000
+                y_pred        = y_pred_scaled * 10000
 
-                # 오차 제곱의 평균 → MSE
-                errors = y_original - y_pred
-                MSE = np.mean(errors**2)
+                # 4-2) MAE(평균 절대 오차)
+                errors     = y_original - y_pred
+                abs_errors = np.abs(errors)
+                MAE        = np.mean(abs_errors)
 
-                # 3) 데이터 분산(Var) 및 범위(range) 계산
-                var_Y = np.var(y_original)                              # 분산
-                data_range = y_original.max() - y_original.min()         # 범위
-                range10 = data_range * 0.1                               # 범위의 10%
+                # 4-3) MAPE(평균 오차율)
+                MAPE = np.mean(abs_errors / (y_original + 1)) * 100
 
-                # 4) 결과 출력
-                st.markdown(f"### 🔍 평균제곱오차 (MSE): {MSE:,.2f}")
-                st.markdown(f"- 데이터 분산 (Var): {var_Y:,.2f}")
-                st.markdown(f"- 데이터 범위 (max−min): {data_range:,.2f}")
-                st.markdown(f"- 범위의 10% 수준: {range10:,.2f}")
+                # 4-4) 결과 출력
+                st.markdown(f"### 🔍 평균 절대 오차 (MAE): {MAE:,.0f}회")
+                st.markdown(f"### 🔍 평균 오차율 (MAPE): {MAPE:.1f}%")
 
-                # 5) MSE 의미 설명
+                # 4-5) 등급 평가
+                if MAPE <= 5:
+                    grade = "🟢 매우 정확!"
+                elif MAPE <= 10:
+                    grade = "🟡 보통 수준"
+                else:
+                    grade = "🔴 개선 필요"
+                st.markdown(f"**모델 적합 등급:** {grade}")
+
+                # 4-6) 실제 vs 예측 시각화
+                df_plot = pd.DataFrame({
+                    '시간(시간 단위)': x_hours_all,
+                    '실제 조회수':    y_original,
+                    '예측 조회수':    y_pred
+                })
+                st.line_chart(df_plot.set_index('시간(시간 단위)'))
+
+                # 4-7) 개념 설명
                 st.markdown("""
-**MSE(Mean Squared Error, 평균제곱오차)**  
-예측값과 실제값의 차이를 제곱한 뒤 그 평균을 구한 값으로,  
-값이 작을수록 예측 오차가 적다는 것을 의미합니다.
+        **MAE(평균 절대 오차)**  
+        예측값과 실제값의 차이를 모두 양수로 바꿔 평균을 구한 값으로,  
+        ‘평균적으로 몇 회’ 차이가 나는지를 직관적으로 알려줘요.
 
-- **단위**: (실제 조회수 단위\(^2\))이므로 수치가 크게 보일 수 있습니다.  
-- **값의 의미**:  
-  - 0에 가까울수록 예측 정확도가 높음  
-  - 클수록 오차가 크다는 뜻
+        **MAPE(평균 오차율)**  
+        예측 오차가 실제 조회수 대비 몇 퍼센트인지 알려줘서,  
+        숫자가 커도 비율로 쉽게 비교할 수 있습니다.
 
-**모델 적합 판단 기준**  
-- 일반적으로 **MSE < 데이터 분산(Var(Y))** 이면 모델이 충분히 적합하다고 봅니다.  
-- 또는 **데이터 범위(range)의 10% 수준** 이내에 MSE가 들어오면 안정적인 예측 모델로 간주할 수 있습니다.
- 위 계산 결과를 참조해 보세요!  
- """)
+        - 값이 작을수록 모델이 더 정확해요!  
+        - 등급과 그래프를 통해 모델 성능을 한눈에 파악해 보세요.
+        """)
             if st.button("실제 데이터 더 확인하기", key="detail_button"):
                 st.session_state["detail_clicked"] = True
 
