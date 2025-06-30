@@ -506,9 +506,9 @@ def main_ui():
                 st.markdown(f"### 🔍 평균 오차율 (MAPE): {MAPE:.1f}%")
 
                 # 7) 등급 평가
-                if MAPE <= 5:
+                if MAPE <= 15:
                     grade = "🟢 매우 정확!"
-                elif MAPE <= 10:
+                elif MAPE <= 40:
                     grade = "🟡 보통 수준"
                 else:
                     grade = "🔴 개선 필요"
