@@ -539,30 +539,27 @@ def main_ui():
                 st.session_state["detail_clicked"] = True
 
             if st.session_state.get("detail_clicked", False):
-                # 1) 회귀에 사용한 x_hours(시간 단위) 배열을 가져온다
-                x_hours_all = st.session_state["x_hours"]   # (timestamp – base).dt.total_seconds() / 3600
-                # 2) ts_curve: 0부터 x_hours_all.max()까지 200개 점을 생성 (시간 단위)
+                # 1) 결측치 제거 후 재계산
+                df_clean = df_global.dropna(subset=['timestamp', 'viewcount']).reset_index(drop=True)
+                timestamps = pd.to_datetime(df_clean['timestamp'])
+                y_original = df_clean['viewcount'].astype(float).values
+
+                # 2) 시간(시간 단위) 축 재계산
+                elapsed_sec = (timestamps - base).dt.total_seconds()
+                x_hours_all = elapsed_sec / 3600
+
+                # 3) 회귀 곡선용 시간 샘플
                 ts_curve = np.linspace(0, x_hours_all.max(), 200)
 
+                # 4) 플롯 그리기
                 fig2, ax2 = plt.subplots(figsize=(6, 4))
+                ax2.scatter(timestamps, y_original, alpha=0.5, label="실제 조회수")
 
-                # 3) 실제 데이터 산점도 (원본 timestamp vs 원본 viewcount)
-                #    df에는 ['timestamp'], y_original (원본 조회수) 가 있다고 가정
-                df_global = st.session_state["df"]
-                y_original = st.session_state["y"]
-                ax2.scatter(df_global['timestamp'], y_original, alpha=0.5, label="실제 조회수")
-
-                # 4) 모델 곡선: ts_curve(시 단위)를 초 단위로 변환해서 timestamp 계산
-                base = st.session_state["base"]
-                a, b, c = st.session_state["a"], st.session_state["b"], st.session_state["c"]
-                # 회귀식으로 예측된 y_scaled (만 단위)
+                # 5) 모델 곡선 계산 & 플롯
                 y_curve_scaled = a * ts_curve**2 + b * ts_curve + c
-                # 실제 조회수 단위로 환산 (만 단위 → 원 단위)
                 y_curve = y_curve_scaled * 10000
-
-                # x_curve_timestamp: base + (ts_curve 시 단위 → 초 단위) 
-                x_curve_timestamp = base + pd.to_timedelta(ts_curve * 3600, unit='s')
-                ax2.plot(x_curve_timestamp, y_curve, color='red', linewidth=2, label="회귀 곡선")
+                x_curve_timestamps = base + pd.to_timedelta(ts_curve * 3600, unit='s')
+                ax2.plot(x_curve_timestamps, y_curve, color='red', linewidth=2, label="회귀 곡선")
 
                 ax2.set_xlabel('시간')
                 ax2.set_ylabel('조회수')
@@ -570,14 +567,14 @@ def main_ui():
                 plt.xticks(rotation=45)
                 st.pyplot(fig2)
 
-                # 5) 다운로드 버튼 (원단위 곡선 그래프)
+                # 6) 이미지 다운로드 버튼
                 buf1 = io.BytesIO()
                 fig2.savefig(buf1, format='png', dpi=150, bbox_inches='tight')
                 buf1.seek(0)
                 st.download_button(
                     label="📷 실제 데이터 그래프 다운로드",
                     data=buf1,
-                    file_name="real_data_plot_scaled.png",
+                    file_name="real_data_plot.png",
                     mime="image/png"
                 )
             
