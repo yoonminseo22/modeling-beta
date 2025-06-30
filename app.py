@@ -475,26 +475,37 @@ def main_ui():
             if st.button("적합도 평가", key="eval_button"):
                 st.session_state["eval_clicked"] = True
 
-            # ─── 4. MAE/​MAPE 계산 및 출력 ────────────────────────────────────
             if st.session_state.get("eval_clicked", False):
-                # 4-1) 예측값 계산 (만 단위 → 원 단위)
+                # 1) 결측치 있는 행 제거
+                df_clean = df_global.dropna(subset=['timestamp', 'viewcount']).reset_index(drop=True)
+
+                # 2) timestamp→datetime, viewcount→numpy array
+                timestamps  = pd.to_datetime(df_clean['timestamp'])
+                y_original  = df_clean['viewcount'].astype(float).values
+
+                # 3) 시간 경과(초) → 시간(시간 단위)
+                elapsed_sec = (timestamps - base).dt.total_seconds()
+                x_hours_all = elapsed_sec / 3600
+
+                # 디버깅: 길이 확인 (주석 해제해 보세요)
+                # st.write("len(x)=", x_hours_all.size, "len(y)=", y_original.size)
+
+                # 4) 예측값 계산 (만 단위 → 원 단위)
                 time_poly     = np.poly1d([a, b, c])
                 y_pred_scaled = time_poly(x_hours_all)
                 y_pred        = y_pred_scaled * 10000
 
-                # 4-2) MAE(평균 절대 오차)
+                # 5) MAE/​MAPE 계산
                 errors     = y_original - y_pred
                 abs_errors = np.abs(errors)
                 MAE        = np.mean(abs_errors)
+                MAPE       = np.mean(abs_errors / (y_original + 1)) * 100
 
-                # 4-3) MAPE(평균 오차율)
-                MAPE = np.mean(abs_errors / (y_original + 1)) * 100
-
-                # 4-4) 결과 출력
+                # 6) 결과 출력
                 st.markdown(f"### 🔍 평균 절대 오차 (MAE): {MAE:,.0f}회")
                 st.markdown(f"### 🔍 평균 오차율 (MAPE): {MAPE:.1f}%")
 
-                # 4-5) 등급 평가
+                # 7) 등급 평가
                 if MAPE <= 5:
                     grade = "🟢 매우 정확!"
                 elif MAPE <= 10:
@@ -503,7 +514,7 @@ def main_ui():
                     grade = "🔴 개선 필요"
                 st.markdown(f"**모델 적합 등급:** {grade}")
 
-                # 4-6) 실제 vs 예측 시각화
+                # 8) 시각화
                 df_plot = pd.DataFrame({
                     '시간(시간 단위)': x_hours_all,
                     '실제 조회수':    y_original,
